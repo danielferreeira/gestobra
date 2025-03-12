@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   FaArrowLeft, FaEdit, FaTrash, FaBuilding, FaCalendarAlt, 
@@ -10,13 +10,15 @@ import EtapasObra from '../components/EtapasObra';
 import DocumentosObra from '../components/DocumentosObra';
 import CronogramaObra from '../components/CronogramaObra';
 import OrcamentoObra from '../components/OrcamentoObra';
-import { calcularTotalPrevisto, calcularTotalRealizado } from '../services/etapasService';
+import { calcularTotalPrevisto, calcularTotalRealizado, calcularProgressoGeral, getEtapasByObraId } from '../services/etapasService';
+import { getDespesasByObraId } from '../services/despesasService';
 
 const DetalheObra = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [obra, setObra] = useState(null);
   const [etapas, setEtapas] = useState([]);
+  const [valorPrevistoTotal, setValorPrevistoTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showModal, setShowModal] = useState(false);
@@ -31,8 +33,24 @@ const DetalheObra = () => {
     descricao: '',
     area_construida: '',
     responsavel: '',
-    cliente: ''
+    cliente: '',
+    progresso: 0
   });
+
+  // Função para formatar data para o formato do input date (YYYY-MM-DD)
+  const formatDateForInput = (dateString) => {
+    if (!dateString) return '';
+    
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return ''; // Data inválida
+      
+      return date.toISOString().split('T')[0]; // Retorna no formato YYYY-MM-DD
+    } catch (error) {
+      console.error('Erro ao formatar data:', error);
+      return '';
+    }
+  };
 
   // Carregar dados da obra
   useEffect(() => {
@@ -71,13 +89,14 @@ const DetalheObra = () => {
           nome: data.nome || '',
           endereco: data.endereco || '',
           orcamento: data.orcamento || '',
-          data_inicio: data.data_inicio || '',
-          data_fim: data.data_fim || '',
+          data_inicio: formatDateForInput(data.data_inicio),
+          data_fim: formatDateForInput(data.data_fim),
           status: data.status || 'planejada',
           descricao: data.descricao || '',
           area_construida: data.area_construida || '',
           responsavel: data.responsavel || '',
-          cliente: data.cliente || ''
+          cliente: data.cliente || '',
+          progresso: data.progresso || 0
         });
         setLoading(false);
       } catch (error) {
@@ -89,21 +108,62 @@ const DetalheObra = () => {
 
     fetchObra();
     fetchEtapas();
+    fetchDespesas();
   }, [id]);
 
   const fetchEtapas = async () => {
     try {
-      const { data, error } = await supabase
-        .from('etapas_obra')
-        .select('*')
-        .eq('obra_id', id)
-        .order('ordem');
+      const { data, error } = await getEtapasByObraId(id);
 
       if (error) throw error;
+      
       setEtapas(data || []);
+      
+      // Calcular e atualizar o progresso da obra
+      if (data && data.length > 0) {
+        const progresso = calcularProgressoGeral(data);
+        atualizarProgressoObra(progresso);
+        
+        // Calcular o valor previsto total
+        const totalPrevisto = calcularTotalPrevisto(data);
+        setValorPrevistoTotal(totalPrevisto);
+      }
     } catch (error) {
       console.error('Erro ao buscar etapas:', error);
       setError('Erro ao carregar as etapas da obra');
+    }
+  };
+
+  // Atualizar o progresso da obra no banco de dados
+  const atualizarProgressoObra = async (progresso) => {
+    try {
+      const { error } = await supabase
+        .from('obras')
+        .update({ progresso, updated_at: new Date() })
+        .eq('id', id);
+      
+      if (error) throw error;
+      
+      // Atualizar o estado local
+      setObra(prev => ({ ...prev, progresso }));
+      setFormData(prev => ({ ...prev, progresso }));
+    } catch (error) {
+      console.error('Erro ao atualizar progresso da obra:', error);
+    }
+  };
+
+  // Buscar despesas e calcular o total gasto
+  const fetchDespesas = async () => {
+    try {
+      const { data, error } = await getDespesasByObraId(id);
+
+      if (error) throw error;
+      
+      // Calcular o total gasto
+      const totalGasto = data.reduce((total, despesa) => total + (parseFloat(despesa.valor) || 0), 0);
+      setTotalGastoDespesas(totalGasto);
+    } catch (error) {
+      console.error('Erro ao buscar despesas:', error);
     }
   };
 
@@ -120,12 +180,37 @@ const DetalheObra = () => {
     try {
       setLoading(true);
       
+      // Criar uma cópia dos dados do formulário para enviar
+      const dataToUpdate = {
+        ...formData,
+        updated_at: new Date()
+      };
+      
+      // Garantir que as datas estejam no formato correto
+      if (dataToUpdate.data_inicio) {
+        dataToUpdate.data_inicio = new Date(dataToUpdate.data_inicio).toISOString();
+      }
+      
+      if (dataToUpdate.data_fim) {
+        dataToUpdate.data_fim = new Date(dataToUpdate.data_fim).toISOString();
+      }
+      
+      // Tratar campos numéricos vazios
+      if (dataToUpdate.orcamento === '') {
+        dataToUpdate.orcamento = null;
+      }
+      
+      if (dataToUpdate.area_construida === '') {
+        dataToUpdate.area_construida = null;
+      }
+      
+      if (dataToUpdate.progresso === '') {
+        dataToUpdate.progresso = null;
+      }
+      
       const { error } = await supabase
         .from('obras')
-        .update({
-          ...formData,
-          updated_at: new Date()
-        })
+        .update(dataToUpdate)
         .eq('id', id);
       
       if (error) throw error;
@@ -171,6 +256,26 @@ const DetalheObra = () => {
       setError('Erro ao excluir: ' + error.message);
       setLoading(false);
     }
+  };
+
+  // Função para atualizar o valor previsto total quando as etapas são alteradas
+  const handleOrcamentoChange = (novoValorPrevisto) => {
+    // Apenas atualizar o estado local do valor previsto total
+    setValorPrevistoTotal(novoValorPrevisto);
+  };
+
+  // Função para atualizar o progresso quando as etapas são alteradas
+  const handleProgressoChange = () => {
+    // Recarregar etapas e recalcular progresso
+    fetchEtapas();
+  };
+
+  // Estado para armazenar o total gasto em despesas
+  const [totalGastoDespesas, setTotalGastoDespesas] = useState(0);
+
+  // Função para atualizar o total gasto em despesas
+  const handleTotalGastoChange = (novoTotalGasto) => {
+    setTotalGastoDespesas(novoTotalGasto);
   };
 
   console.log('Current state:', { loading, error, obra, activeTab });
@@ -265,9 +370,22 @@ const DetalheObra = () => {
     );
   }
 
-  const totalPrevisto = calcularTotalPrevisto(etapas);
-  const totalRealizado = calcularTotalRealizado(etapas);
-  const diferencaOrcamento = totalPrevisto - totalRealizado;
+  // Substituir o cálculo direto pelo estado
+  // const totalPrevisto = calcularTotalPrevisto(etapas);
+  const totalPrevisto = valorPrevistoTotal;
+  // Corrigir o cálculo do valor realizado para usar o total gasto das despesas, não das etapas
+  // const totalRealizado = etapas.reduce((total, etapa) => total + (parseFloat(etapa.valor_realizado) || 0), 0);
+  const totalRealizado = totalGastoDespesas;
+  // Calcular a diferença orçamentária corretamente
+  const diferencaOrcamento = obra.orcamento - totalRealizado;
+
+  // Função para formatar moeda
+  const formatCurrency = (value) => {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL'
+    }).format(value || 0);
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
@@ -365,9 +483,19 @@ const DetalheObra = () => {
           {/* Conteúdo das tabs */}
           <div className="p-6">
             {activeTab === 'info' && <DetalhesObra obra={obra} />}
-            {activeTab === 'etapas' && <EtapasObra obraId={id} />}
+            {activeTab === 'etapas' && (
+              <EtapasObra 
+                obraId={id} 
+                onOrcamentoChange={handleOrcamentoChange}
+                onProgressoChange={handleProgressoChange}
+              />
+            )}
             {activeTab === 'cronograma' && <CronogramaObra obraId={id} />}
-            {activeTab === 'orcamento' && <OrcamentoObra obraId={id} orcamentoTotal={obra.orcamento} />}
+            {activeTab === 'orcamento' && <OrcamentoObra 
+              obraId={id} 
+              orcamentoTotal={obra.orcamento} 
+              onTotalGastoChange={handleTotalGastoChange}
+            />}
             {activeTab === 'documentos' && <DocumentosObra obraId={id} />}
           </div>
         </div>
@@ -421,6 +549,9 @@ const DetalheObra = () => {
                       min="0"
                       step="0.01"
                     />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Defina o orçamento total disponível para esta obra. Este valor é independente do valor previsto nas etapas.
+                    </p>
                   </div>
                   
                   <div>
@@ -548,19 +679,44 @@ const DetalheObra = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="bg-gray-50 p-4 rounded-lg">
               <h3 className="text-sm font-medium text-gray-500 mb-1">Valor Previsto Total</h3>
-              <p className="text-xl font-semibold text-gray-900">{totalPrevisto}</p>
+              <p className="text-xl font-semibold text-gray-900">{formatCurrency(totalPrevisto)}</p>
+              <p className="text-xs text-gray-500 mt-1">Soma dos valores previstos nas etapas</p>
             </div>
             <div className="bg-gray-50 p-4 rounded-lg">
-              <h3 className="text-sm font-medium text-gray-500 mb-1">Valor Realizado Total</h3>
-              <p className="text-xl font-semibold text-gray-900">{totalRealizado}</p>
+              <h3 className="text-sm font-medium text-gray-500 mb-1">Total Gasto</h3>
+              <p className="text-xl font-semibold text-gray-900">{formatCurrency(totalRealizado)}</p>
+              <p className="text-xs text-gray-500 mt-1">Soma de todas as despesas</p>
             </div>
             <div className={`bg-gray-50 p-4 rounded-lg ${diferencaOrcamento < 0 ? 'bg-red-50' : 'bg-green-50'}`}>
-              <h3 className="text-sm font-medium text-gray-500 mb-1">Diferença Orçamentária</h3>
+              <h3 className="text-sm font-medium text-gray-500 mb-1">Saldo Disponível</h3>
               <p className={`text-xl font-semibold ${diferencaOrcamento < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                {Math.abs(diferencaOrcamento)}
+                {formatCurrency(Math.abs(diferencaOrcamento))}
                 <span className="text-sm ml-1">
-                  {diferencaOrcamento < 0 ? '(Acima do previsto)' : '(Abaixo do previsto)'}
+                  {diferencaOrcamento < 0 ? '(Orçamento excedido)' : '(Orçamento disponível)'}
                 </span>
+              </p>
+              <p className="text-xs text-gray-500 mt-1">Orçamento total menos total gasto (não considera valores previstos)</p>
+            </div>
+          </div>
+          
+          {/* Saldo Não Comprometido */}
+          <div className="mt-6">
+            <h3 className="text-lg font-medium mb-3">Saldo Real Disponível</h3>
+            <div className={`p-4 rounded-lg ${(obra.orcamento - totalPrevisto - totalRealizado) < 0 ? 'bg-red-50' : 'bg-teal-50'}`}>
+              <h3 className="text-sm font-medium text-gray-500 mb-1">Saldo Não Comprometido</h3>
+              <p className={`text-xl font-semibold ${(obra.orcamento - totalPrevisto - totalRealizado) < 0 ? 'text-red-600' : 'text-teal-600'}`}>
+                {formatCurrency(Math.abs(obra.orcamento - totalPrevisto - totalRealizado))}
+                <span className="text-sm ml-1">
+                  {(obra.orcamento - totalPrevisto - totalRealizado) < 0 ? '(Valor comprometido excede o orçamento)' : '(Disponível para novas etapas)'}
+                </span>
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                Orçamento total menos valor previsto nas etapas menos total gasto
+                {(obra.orcamento - totalPrevisto - totalRealizado) < 0 && 
+                  <span className="text-red-600 block mt-1">
+                    Atenção: O valor comprometido (previsto + gasto) excede o orçamento total!
+                  </span>
+                }
               </p>
             </div>
           </div>

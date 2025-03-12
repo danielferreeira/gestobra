@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { FaCalendarAlt, FaExclamationTriangle, FaSearch, FaSearchMinus, FaSearchPlus, FaFileExport, FaLink, FaInfoCircle, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
 import { supabase } from '../services/supabaseClient';
 import { getEtapasByObraId, getDependenciasByEtapaId } from '../services/etapasService';
@@ -586,7 +586,7 @@ const CronogramaObra = ({ obraId }) => {
                 </div>
               );
             })}
-        </div>
+          </div>
       </div>
 
       {/* Modal de informações da etapa */}
@@ -637,9 +637,9 @@ const CronogramaObra = ({ obraId }) => {
                 <div>
                   <p className="text-gray-500">Estimativa de Horas:</p>
                   <p>{etapaInfo.estimativa_horas || 'Não definida'}</p>
-                </div>
-              </div>
-              
+        </div>
+      </div>
+
               {etapaInfo.descricao && (
                 <div>
                   <p className="text-gray-500">Descrição:</p>
@@ -661,9 +661,9 @@ const CronogramaObra = ({ obraId }) => {
                       ) : (
                         <p className="text-gray-400 italic">Nenhuma etapa requisito</p>
                       )}
-                    </div>
-                  </div>
-                  
+        </div>
+      </div>
+
                   <div>
                     <p className="text-gray-500 mb-1">Etapas Dependentes:</p>
                     <div className="text-sm">
@@ -691,7 +691,7 @@ const CronogramaObra = ({ obraId }) => {
               </button>
         </div>
         </div>
-        </div>
+      </div>
       )}
     </div>
   );

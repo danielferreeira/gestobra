@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabaseClient';
 import { FaArrowLeft, FaSave } from 'react-icons/fa';
@@ -31,13 +31,34 @@ const NovaObra = () => {
     setError(null);
 
     try {
+      // Criar uma cópia dos dados do formulário para enviar
+      const dataToInsert = {
+        ...formData,
+        created_at: new Date(),
+        updated_at: new Date()
+      };
+      
+      // Garantir que as datas estejam no formato correto
+      if (dataToInsert.data_inicio) {
+        dataToInsert.data_inicio = new Date(dataToInsert.data_inicio).toISOString();
+      }
+      
+      if (dataToInsert.data_fim) {
+        dataToInsert.data_fim = new Date(dataToInsert.data_fim).toISOString();
+      }
+      
+      // Tratar campos numéricos vazios
+      if (dataToInsert.orcamento === '') {
+        dataToInsert.orcamento = null;
+      }
+      
+      if (dataToInsert.area_construida === '') {
+        dataToInsert.area_construida = null;
+      }
+
       const { data, error } = await supabase
         .from('obras')
-        .insert([{
-          ...formData,
-          created_at: new Date(),
-          updated_at: new Date()
-        }])
+        .insert([dataToInsert])
         .select()
         .single();
 
@@ -118,6 +139,9 @@ const NovaObra = () => {
                   min="0"
                   step="0.01"
                 />
+                <p className="text-xs text-gray-500 mt-1">
+                  Defina o orçamento total disponível para esta obra. Este valor é independente do valor previsto nas etapas.
+                </p>
               </div>
 
               <div>

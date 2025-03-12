@@ -1,12 +1,7 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { FaPlus, FaSearch, FaEdit, FaTrash, FaEye, FaBuilding, FaFilter, FaSort, FaThList, FaTh, FaCalendarAlt, FaMoneyBillWave, FaMapMarkerAlt, FaTools, FaCheckCircle, FaHourglass } from 'react-icons/fa';
 import { Link, useNavigate } from 'react-router-dom';
-import { createClient } from '@supabase/supabase-js';
-
-// Criando o cliente do Supabase diretamente
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+import { supabase } from '../services/supabaseClient';
 
 const Obras = () => {
   const navigate = useNavigate();

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { FaHome, FaBuilding, FaMoneyBillWave, FaBoxes, FaFileInvoice, FaChartBar, FaUserCog, FaBars, FaSignOutAlt } from 'react-icons/fa';
 import { useAuth } from '../context/AuthContext';
@@ -24,7 +24,7 @@ const Layout = () => {
     { path: '/dashboard', icon: <FaHome />, label: 'Dashboard' },
     { path: '/obras', icon: <FaBuilding />, label: 'Obras' },
     { path: '/financeiro', icon: <FaMoneyBillWave />, label: 'Financeiro' },
-    { path: '/materiais', icon: <FaBoxes />, label: 'Materiais' },
+    { path: '/fornecedores', icon: <FaBoxes />, label: 'Fornecedores' },
     { path: '/documentos', icon: <FaFileInvoice />, label: 'Documentos' },
     { path: '/relatorios', icon: <FaChartBar />, label: 'Relatórios' },
     { path: '/configuracoes', icon: <FaUserCog />, label: 'Configurações' },

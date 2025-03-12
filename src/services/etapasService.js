@@ -8,10 +8,10 @@ import { supabase } from './supabaseClient';
 export const getEtapasByObraId = async (obraId) => {
   try {
     const { data, error } = await supabase
-      .from('etapas_obra')
-      .select('*')
-      .eq('obra_id', obraId)
-      .order('ordem');
+    .from('etapas_obra')
+    .select('*')
+    .eq('obra_id', obraId)
+    .order('ordem');
 
     if (error) throw error;
     return { data };
@@ -39,7 +39,7 @@ export const createEtapa = async (etapaData) => {
     const novaOrdem = lastEtapa ? lastEtapa.ordem + 1 : 1;
 
     const { data, error } = await supabase
-      .from('etapas_obra')
+    .from('etapas_obra')
       .insert([{ ...etapaData, ordem: novaOrdem }])
       .select()
       .single();
@@ -61,7 +61,7 @@ export const createEtapa = async (etapaData) => {
 export const updateEtapa = async (id, etapaData) => {
   try {
     const { data, error } = await supabase
-      .from('etapas_obra')
+    .from('etapas_obra')
       .update(etapaData)
       .eq('id', id)
       .select()
@@ -83,9 +83,9 @@ export const updateEtapa = async (id, etapaData) => {
 export const deleteEtapa = async (id) => {
   try {
     const { error } = await supabase
-      .from('etapas_obra')
-      .delete()
-      .eq('id', id);
+    .from('etapas_obra')
+    .delete()
+    .eq('id', id);
 
     if (error) throw error;
     return { error: null };
@@ -104,11 +104,11 @@ export const deleteEtapa = async (id) => {
 export const atualizarProgressoEtapa = async (id, progresso) => {
   try {
     const { data, error } = await supabase
-      .from('etapas_obra')
+    .from('etapas_obra')
       .update({ progresso })
       .eq('id', id)
       .select()
-      .single();
+    .single();
 
     if (error) throw error;
     return { data };
@@ -320,6 +320,46 @@ export const calcularTotalRealizado = (etapas) => {
 export const calcularProgressoGeral = (etapas) => {
   if (!etapas || etapas.length === 0) return 0;
   
+  // Verificar se há valores previstos para usar como peso
+  const temValoresPrevisto = etapas.some(etapa => etapa.valor_previsto > 0);
+  
+  if (temValoresPrevisto) {
+    // Calcular progresso ponderado pelo valor previsto
+    const valorTotal = etapas.reduce((sum, etapa) => sum + (parseFloat(etapa.valor_previsto) || 0), 0);
+    
+    if (valorTotal <= 0) return calcularProgressoSimples(etapas);
+    
+    const progressoPonderado = etapas.reduce((sum, etapa) => {
+      const peso = (parseFloat(etapa.valor_previsto) || 0) / valorTotal;
+      return sum + ((etapa.progresso || 0) * peso);
+    }, 0);
+    
+    return Math.round(progressoPonderado);
+  } else {
+    // Se não houver valores previstos, verificar se há estimativas de horas
+    const temEstimativaHoras = etapas.some(etapa => etapa.estimativa_horas > 0);
+    
+    if (temEstimativaHoras) {
+      // Calcular progresso ponderado pela estimativa de horas
+      const horasTotal = etapas.reduce((sum, etapa) => sum + (parseFloat(etapa.estimativa_horas) || 0), 0);
+      
+      if (horasTotal <= 0) return calcularProgressoSimples(etapas);
+      
+      const progressoPonderado = etapas.reduce((sum, etapa) => {
+        const peso = (parseFloat(etapa.estimativa_horas) || 0) / horasTotal;
+        return sum + ((etapa.progresso || 0) * peso);
+      }, 0);
+      
+      return Math.round(progressoPonderado);
+    } else {
+      // Se não houver nem valores nem horas, calcular média simples
+      return calcularProgressoSimples(etapas);
+    }
+  }
+};
+
+// Função auxiliar para calcular progresso simples (média)
+const calcularProgressoSimples = (etapas) => {
   const totalProgresso = etapas.reduce((sum, etapa) => sum + (etapa.progresso || 0), 0);
   return Math.round(totalProgresso / etapas.length);
 };

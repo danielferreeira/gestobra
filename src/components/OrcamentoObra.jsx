@@ -1,9 +1,11 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { FaMoneyBillWave, FaPlus, FaEdit, FaTrash, FaExclamationTriangle } from 'react-icons/fa';
 import { getDespesasByObraId, createDespesa, updateDespesa, deleteDespesa } from '../services/despesasService';
+import { getEtapasByObraId, calcularProgressoGeral } from '../services/etapasService';
 
-const OrcamentoObra = ({ obraId, orcamentoTotal }) => {
+const OrcamentoObra = ({ obraId, orcamentoTotal, onTotalGastoChange }) => {
   const [despesas, setDespesas] = useState([]);
+  const [etapas, setEtapas] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [currentDespesa, setCurrentDespesa] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -13,49 +15,74 @@ const OrcamentoObra = ({ obraId, orcamentoTotal }) => {
     valor: '',
     data: '',
     categoria: 'material',
-    status_pagamento: 'pago',
-    observacoes: ''
+    status_pagamento: 'pago'
   });
   const [totalGasto, setTotalGasto] = useState(0);
   const [categorias, setCategorias] = useState({});
+  const [progressoObra, setProgressoObra] = useState(0);
+  const [valorPrevistoTotal, setValorPrevistoTotal] = useState(0);
 
-  // Carregar despesas da obra
+  // Carregar despesas e etapas da obra
   useEffect(() => {
-    const fetchDespesas = async () => {
+    const fetchData = async () => {
       if (!obraId) return;
       
       try {
         setLoading(true);
-        const { data, error } = await getDespesasByObraId(obraId);
         
-        if (error) {
-          throw error;
+        // Buscar despesas
+        const { data: despesasData, error: despesasError } = await getDespesasByObraId(obraId);
+        
+        if (despesasError) {
+          throw despesasError;
         }
         
-        setDespesas(data || []);
+        setDespesas(despesasData || []);
         
         // Calcular total gasto
-        const total = data.reduce((acc, despesa) => acc + parseFloat(despesa.valor || 0), 0);
+        const total = despesasData.reduce((acc, despesa) => acc + parseFloat(despesa.valor || 0), 0);
         setTotalGasto(total);
+        
+        // Comunicar o total gasto para o componente pai
+        if (onTotalGastoChange) {
+          onTotalGastoChange(total);
+        }
         
         // Calcular totais por categoria
         const catTotals = {};
-        data.forEach(despesa => {
+        despesasData.forEach(despesa => {
           const cat = despesa.categoria || 'outros';
           catTotals[cat] = (catTotals[cat] || 0) + parseFloat(despesa.valor || 0);
         });
         setCategorias(catTotals);
         
+        // Buscar etapas para calcular o progresso
+        const { data: etapasData, error: etapasError } = await getEtapasByObraId(obraId);
+        
+        if (etapasError) {
+          throw etapasError;
+        }
+        
+        setEtapas(etapasData || []);
+        
+        // Calcular progresso geral com base nas etapas
+        const progresso = calcularProgressoGeral(etapasData || []);
+        setProgressoObra(progresso);
+        
+        // Calcular valor previsto total das etapas
+        const totalPrevisto = etapasData.reduce((acc, etapa) => acc + parseFloat(etapa.valor_previsto || 0), 0);
+        setValorPrevistoTotal(totalPrevisto);
+        
         setLoading(false);
       } catch (error) {
-        console.error('Erro ao carregar despesas:', error);
-        setError(error.message || 'Erro ao carregar despesas');
+        console.error('Erro ao carregar dados:', error);
+        setError(error.message || 'Erro ao carregar dados');
         setLoading(false);
       }
     };
     
-    fetchDespesas();
-  }, [obraId]);
+    fetchData();
+  }, [obraId, onTotalGastoChange]);
 
   // Formatar valores monetários
   const formatCurrency = (value) => {
@@ -106,8 +133,7 @@ const OrcamentoObra = ({ obraId, orcamentoTotal }) => {
         valor: despesa.valor,
         data: despesa.data,
         categoria: despesa.categoria,
-        status_pagamento: despesa.status_pagamento,
-        observacoes: despesa.observacoes || ''
+        status_pagamento: despesa.status_pagamento
       });
     } else {
       setCurrentDespesa(null);
@@ -116,8 +142,7 @@ const OrcamentoObra = ({ obraId, orcamentoTotal }) => {
         valor: '',
         data: new Date().toISOString().split('T')[0],
         categoria: 'material',
-        status_pagamento: 'pago',
-        observacoes: ''
+        status_pagamento: 'pago'
       });
     }
     
@@ -145,9 +170,15 @@ const OrcamentoObra = ({ obraId, orcamentoTotal }) => {
       
       const despesaData = {
         ...formData,
-        obra_id: obraId,
-        valor: parseFloat(formData.valor.replace(',', '.'))
+        obra_id: obraId
       };
+      
+      // Tratar o campo valor
+      if (formData.valor === '') {
+        despesaData.valor = null;
+      } else {
+        despesaData.valor = parseFloat(formData.valor.replace(',', '.'));
+      }
       
       let result;
       
@@ -175,6 +206,11 @@ const OrcamentoObra = ({ obraId, orcamentoTotal }) => {
       // Recalcular total gasto
       const total = data.reduce((acc, despesa) => acc + parseFloat(despesa.valor || 0), 0);
       setTotalGasto(total);
+      
+      // Comunicar o total gasto para o componente pai
+      if (onTotalGastoChange) {
+        onTotalGastoChange(total);
+      }
       
       // Recalcular totais por categoria
       const catTotals = {};
@@ -220,6 +256,11 @@ const OrcamentoObra = ({ obraId, orcamentoTotal }) => {
       // Recalcular total gasto
       const total = data.reduce((acc, despesa) => acc + parseFloat(despesa.valor || 0), 0);
       setTotalGasto(total);
+      
+      // Comunicar o total gasto para o componente pai
+      if (onTotalGastoChange) {
+        onTotalGastoChange(total);
+      }
       
       // Recalcular totais por categoria
       const catTotals = {};
@@ -274,23 +315,50 @@ const OrcamentoObra = ({ obraId, orcamentoTotal }) => {
       </div>
 
       {/* Resumo do orçamento */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         <div className="bg-blue-50 p-4 rounded-md">
           <div className="text-sm text-blue-800 font-medium">Orçamento Total</div>
           <div className="text-2xl font-bold">{formatCurrency(orcamentoTotal || 0)}</div>
+          <div className="text-xs text-gray-500 mt-1">Valor definido para a obra</div>
+        </div>
+        <div className="bg-purple-50 p-4 rounded-md">
+          <div className="text-sm text-purple-800 font-medium">Valor Previsto (Etapas)</div>
+          <div className="text-2xl font-bold">{formatCurrency(valorPrevistoTotal || 0)}</div>
+          <div className="text-xs text-gray-500 mt-1">Soma dos valores previstos das etapas</div>
         </div>
         <div className="bg-green-50 p-4 rounded-md">
           <div className="text-sm text-green-800 font-medium">Total Gasto</div>
           <div className="text-2xl font-bold">{formatCurrency(totalGasto || 0)}</div>
+          <div className="text-xs text-gray-500 mt-1">Soma de todas as despesas</div>
         </div>
         <div className={`p-4 rounded-md ${orcamentoExcedido ? 'bg-red-50' : 'bg-yellow-50'}`}>
           <div className={`text-sm font-medium ${orcamentoExcedido ? 'text-red-800' : 'text-yellow-800'}`}>
-            {orcamentoExcedido ? 'Excedente' : 'Saldo Disponível'}
+            Saldo Disponível
           </div>
           <div className="text-2xl font-bold">
-            {orcamentoExcedido 
-              ? formatCurrency(totalGasto - orcamentoTotal) 
-              : formatCurrency(orcamentoTotal - totalGasto)}
+            {formatCurrency(orcamentoTotal - totalGasto)}
+          </div>
+          <div className="text-xs text-gray-500 mt-1">Orçamento total menos total gasto (não considera valores previstos)</div>
+        </div>
+      </div>
+
+      {/* Saldo Não Comprometido */}
+      <div className="mb-6">
+        <h3 className="text-lg font-medium mb-3">Saldo Real Disponível</h3>
+        <div className={`p-4 rounded-md ${(orcamentoTotal - valorPrevistoTotal - totalGasto) < 0 ? 'bg-red-50' : 'bg-teal-50'}`}>
+          <div className={`text-sm font-medium ${(orcamentoTotal - valorPrevistoTotal - totalGasto) < 0 ? 'text-red-800' : 'text-teal-800'}`}>
+            Saldo Não Comprometido
+          </div>
+          <div className="text-2xl font-bold">
+            {formatCurrency(orcamentoTotal - valorPrevistoTotal - totalGasto)}
+          </div>
+          <div className="text-xs text-gray-500 mt-1">
+            Orçamento total menos valor previsto nas etapas menos total gasto
+            {(orcamentoTotal - valorPrevistoTotal - totalGasto) < 0 && 
+              <span className="text-red-600 block mt-1">
+                Atenção: O valor comprometido (previsto + gasto) excede o orçamento total!
+              </span>
+            }
           </div>
         </div>
       </div>
@@ -315,33 +383,53 @@ const OrcamentoObra = ({ obraId, orcamentoTotal }) => {
         )}
       </div>
 
+      {/* Progresso da obra baseado nas etapas */}
+      <div className="mb-6">
+        <div className="flex justify-between text-sm mb-1">
+          <span>Progresso da Obra</span>
+          <span>{progressoObra}%</span>
+        </div>
+        <div className="w-full bg-gray-200 rounded-full h-2.5">
+          <div 
+            className="h-2.5 rounded-full bg-green-600" 
+            style={{ width: `${progressoObra}%` }}
+          ></div>
+        </div>
+      </div>
+
       {/* Despesas por categoria */}
       <div className="mb-6">
         <h3 className="text-lg font-medium mb-3">Despesas por Categoria</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {Object.entries(categorias).map(([categoria, valor]) => {
-            const categoriaInfo = getCategoriaLabel(categoria);
-            const percentual = Math.round((valor / totalGasto) * 100);
-            
-            return (
-              <div key={categoria} className="border rounded-md p-3">
-                <div className="flex justify-between items-center mb-2">
-                  <span className={`px-2 py-1 rounded-full text-xs ${categoriaInfo.color}`}>
-                    {categoriaInfo.label}
-                  </span>
-                  <span className="text-sm font-medium">{percentual}%</span>
+        {Object.keys(categorias).length === 0 ? (
+          <div className="text-center py-4 text-gray-500">
+            Nenhuma despesa cadastrada para esta obra.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {Object.entries(categorias).map(([categoria, valor]) => {
+              const categoriaInfo = getCategoriaLabel(categoria);
+              const percentual = Math.round((valor / totalGasto) * 100);
+              
+              return (
+                <div key={categoria} className="border rounded-md p-3">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className={`px-2 py-1 rounded-full text-xs ${categoriaInfo.color}`}>
+                      {categoriaInfo.label}
+                    </span>
+                    <span className="text-sm font-medium">{percentual}%</span>
+                  </div>
+                  <div className="text-lg font-bold">{formatCurrency(valor)}</div>
+                  <div className="w-full bg-gray-200 rounded-full h-1.5 mt-2">
+                    <div 
+                      className="h-1.5 rounded-full bg-blue-600" 
+                      style={{ width: `${percentual}%` }}
+                    ></div>
+                  </div>
                 </div>
-                <div className="text-lg font-bold">{formatCurrency(valor)}</div>
-                <div className="w-full bg-gray-200 rounded-full h-1.5 mt-2">
-                  <div 
-                    className="h-1.5 rounded-full bg-blue-600" 
-                    style={{ width: `${percentual}%` }}
-                  ></div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Lista de despesas */}
@@ -387,9 +475,6 @@ const OrcamentoObra = ({ obraId, orcamentoTotal }) => {
                   <tr key={despesa.id}>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">{despesa.descricao}</div>
-                      {despesa.observacoes && (
-                        <div className="text-xs text-gray-500">{despesa.observacoes}</div>
-                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">{formatCurrency(despesa.valor)}</div>
@@ -526,20 +611,6 @@ const OrcamentoObra = ({ obraId, orcamentoTotal }) => {
                   <option value="pendente">Pendente</option>
                   <option value="cancelado">Cancelado</option>
                 </select>
-              </div>
-              
-              <div className="mb-4">
-                <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="observacoes">
-                  Observações
-                </label>
-                <textarea
-                  id="observacoes"
-                  name="observacoes"
-                  value={formData.observacoes}
-                  onChange={handleChange}
-                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                  rows="3"
-                ></textarea>
               </div>
               
               <div className="flex justify-end space-x-2">
