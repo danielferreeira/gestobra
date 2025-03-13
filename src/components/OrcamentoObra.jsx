@@ -51,7 +51,7 @@ const OrcamentoObra = ({ obraId, orcamentoTotal, onTotalGastoChange }) => {
         // Calcular totais por categoria
         const catTotals = {};
         despesasData.forEach(despesa => {
-          const cat = despesa.categoria || 'outros';
+          const cat = despesa.categoria || 'outro';
           catTotals[cat] = (catTotals[cat] || 0) + parseFloat(despesa.valor || 0);
         });
         setCategorias(catTotals);
@@ -106,7 +106,7 @@ const OrcamentoObra = ({ obraId, orcamentoTotal, onTotalGastoChange }) => {
       'equipamento': { label: 'Equipamento', color: 'bg-purple-100 text-purple-800' },
       'servico': { label: 'Serviço', color: 'bg-yellow-100 text-yellow-800' },
       'imposto': { label: 'Imposto', color: 'bg-red-100 text-red-800' },
-      'outros': { label: 'Outros', color: 'bg-gray-100 text-gray-800' }
+      'outro': { label: 'Outros', color: 'bg-gray-100 text-gray-800' }
     };
     
     return categoriaMap[categoria] || { label: categoria, color: 'bg-gray-100 text-gray-800' };
@@ -214,7 +214,7 @@ const OrcamentoObra = ({ obraId, orcamentoTotal, onTotalGastoChange }) => {
       // Recalcular totais por categoria
       const catTotals = {};
       data.forEach(despesa => {
-        const cat = despesa.categoria || 'outros';
+        const cat = despesa.categoria || 'outro';
         catTotals[cat] = (catTotals[cat] || 0) + parseFloat(despesa.valor || 0);
       });
       setCategorias(catTotals);
@@ -264,7 +264,7 @@ const OrcamentoObra = ({ obraId, orcamentoTotal, onTotalGastoChange }) => {
       // Recalcular totais por categoria
       const catTotals = {};
       data.forEach(despesa => {
-        const cat = despesa.categoria || 'outros';
+        const cat = despesa.categoria || 'outro';
         catTotals[cat] = (catTotals[cat] || 0) + parseFloat(despesa.valor || 0);
       });
       setCategorias(catTotals);
@@ -585,11 +585,12 @@ const OrcamentoObra = ({ obraId, orcamentoTotal, onTotalGastoChange }) => {
                   className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
                   required
                 >
+                  <option value="material">Material</option>
                   <option value="mao_de_obra">Mão de Obra</option>
                   <option value="equipamento">Equipamento</option>
                   <option value="servico">Serviço</option>
                   <option value="imposto">Imposto</option>
-                  <option value="outros">Outros</option>
+                  <option value="outro">Outros</option>
                 </select>
               </div>
               

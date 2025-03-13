@@ -317,8 +317,8 @@ const EtapaMateriais = ({ etapaId, obraId, onUpdate }) => {
 
   // Filtrar materiais para o select
   const materiaisFiltrados = materiais.filter(material => 
-    material.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    material.categoria.toLowerCase().includes(searchTerm.toLowerCase())
+    (material.nome?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+    (material.categoria?.toLowerCase() || '').includes(searchTerm.toLowerCase())
   );
 
   // Calcular valor total dos materiais
