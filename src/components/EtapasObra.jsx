@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { FaPlus, FaEdit, FaTrash, FaArrowUp, FaArrowDown, FaLink, FaUnlink, FaCheckSquare, FaExclamationTriangle, FaClock, FaCalculator } from 'react-icons/fa';
+import { FaPlus, FaEdit, FaTrash, FaArrowUp, FaArrowDown, FaLink, FaUnlink, FaCheckSquare, FaExclamationTriangle, FaClock, FaCalculator, FaBoxes } from 'react-icons/fa';
 import { supabase } from '../services/supabaseClient';
+import EtapaMateriais from './EtapaMateriais';
 
 const EtapasObra = ({ obraId, onOrcamentoChange, onProgressoChange }) => {
   const [etapas, setEtapas] = useState([]);
@@ -9,9 +10,8 @@ const EtapasObra = ({ obraId, onOrcamentoChange, onProgressoChange }) => {
   const [showModal, setShowModal] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [activeTab, setActiveTab] = useState('info');
-  const [materiais, setMateriais] = useState([]);
-  const [materiaisEtapa, setMateriaisEtapa] = useState([]);
-  const [loadingMateriais, setLoadingMateriais] = useState(false);
+  const [currentEtapa, setCurrentEtapa] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
   const [formData, setFormData] = useState({
     nome: '',
     descricao: '',
@@ -23,14 +23,6 @@ const EtapasObra = ({ obraId, onOrcamentoChange, onProgressoChange }) => {
     valor_previsto: 0,
     valor_realizado: 0,
     progresso_automatico: false
-  });
-  const [materialForm, setMaterialForm] = useState({
-    material_id: '',
-    quantidade: 1,
-    valor_total: 0,
-    data_compra: '',
-    nota_fiscal: '',
-    observacoes: ''
   });
 
   // Função para formatar moeda
@@ -439,197 +431,6 @@ const EtapasObra = ({ obraId, onOrcamentoChange, onProgressoChange }) => {
     }
   };
 
-  // Carregar materiais disponíveis
-  const fetchMateriais = async () => {
-    try {
-      setLoadingMateriais(true);
-      
-      const { data, error } = await supabase
-        .from('materiais')
-        .select('*, fornecedores(nome)')
-        .order('nome');
-      
-      if (error) throw error;
-      
-      setMateriais(data || []);
-    } catch (error) {
-      console.error('Erro ao carregar materiais:', error);
-    } finally {
-      setLoadingMateriais(false);
-    }
-  };
-
-  // Carregar materiais da etapa
-  const fetchMateriaisEtapa = async (etapaId) => {
-    if (!etapaId) return;
-    
-    try {
-      setLoadingMateriais(true);
-      
-      const { data, error } = await supabase
-        .from('materiais_etapa')
-        .select('*, material:material_id(id, nome, unidade, fornecedor_id, fornecedores:fornecedor_id(nome))')
-        .eq('etapa_id', etapaId);
-      
-      if (error) throw error;
-      
-      setMateriaisEtapa(data || []);
-    } catch (error) {
-      console.error('Erro ao carregar materiais da etapa:', error);
-    } finally {
-      setLoadingMateriais(false);
-    }
-  };
-
-  // Adicionar material à etapa
-  const handleAddMaterial = async (e) => {
-    e.preventDefault();
-    
-    if (!formData.id || !materialForm.material_id) return;
-    
-    try {
-      setLoadingMateriais(true);
-      
-      const novoMaterial = {
-        etapa_id: formData.id,
-        material_id: materialForm.material_id,
-        quantidade: materialForm.quantidade,
-        valor_total: materialForm.valor_total,
-        data_compra: materialForm.data_compra ? new Date(materialForm.data_compra).toISOString() : null,
-        nota_fiscal: materialForm.nota_fiscal,
-        observacoes: materialForm.observacoes
-      };
-      
-      const { error } = await supabase
-        .from('materiais_etapa')
-        .insert([novoMaterial]);
-      
-      if (error) throw error;
-      
-      // Atualizar a lista de materiais da etapa
-      await fetchMateriaisEtapa(formData.id);
-      
-      // Atualizar o valor realizado da etapa
-      await atualizarValorRealizadoEtapa(formData.id);
-      
-      // Limpar o formulário
-      setMaterialForm({
-        material_id: '',
-        quantidade: 1,
-        valor_total: 0,
-        data_compra: '',
-        nota_fiscal: '',
-        observacoes: ''
-      });
-    } catch (error) {
-      console.error('Erro ao adicionar material:', error);
-    } finally {
-      setLoadingMateriais(false);
-    }
-  };
-
-  // Remover material da etapa
-  const handleRemoveMaterial = async (materialEtapaId) => {
-    if (!window.confirm('Tem certeza que deseja remover este material?')) {
-      return;
-    }
-    
-    try {
-      setLoadingMateriais(true);
-      
-      const { error } = await supabase
-        .from('materiais_etapa')
-        .delete()
-        .eq('id', materialEtapaId);
-      
-      if (error) throw error;
-      
-      // Atualizar a lista de materiais da etapa
-      await fetchMateriaisEtapa(formData.id);
-      
-      // Atualizar o valor realizado da etapa
-      await atualizarValorRealizadoEtapa(formData.id);
-    } catch (error) {
-      console.error('Erro ao remover material:', error);
-    } finally {
-      setLoadingMateriais(false);
-    }
-  };
-
-  // Atualizar o valor realizado da etapa com base nos materiais
-  const atualizarValorRealizadoEtapa = async (etapaId) => {
-    try {
-      // Calcular o total gasto com materiais
-      const { data, error } = await supabase
-        .from('materiais_etapa')
-        .select('valor_total')
-        .eq('etapa_id', etapaId);
-      
-      if (error) throw error;
-      
-      const totalMateriais = data.reduce((total, item) => total + parseFloat(item.valor_total || 0), 0);
-      
-      // Atualizar o valor realizado da etapa
-      const { error: updateError } = await supabase
-        .from('etapas_obra')
-        .update({ valor_realizado: totalMateriais })
-        .eq('id', etapaId);
-      
-      if (updateError) throw updateError;
-      
-      // Recarregar as etapas para atualizar a interface
-      await fetchEtapas();
-    } catch (error) {
-      console.error('Erro ao atualizar valor realizado:', error);
-    }
-  };
-
-  // Manipular mudança no formulário de material
-  const handleMaterialFormChange = (e) => {
-    const { name, value } = e.target;
-    
-    if (name === 'material_id') {
-      // Encontrar o material selecionado
-      const materialSelecionado = materiais.find(m => m.id === value);
-      
-      if (materialSelecionado) {
-        // Calcular o valor total com base no preço unitário e quantidade
-        const quantidade = parseFloat(materialForm.quantidade) || 1;
-        const valorTotal = quantidade * parseFloat(materialSelecionado.preco_unitario || 0);
-        
-        setMaterialForm(prev => ({
-          ...prev,
-          [name]: value,
-          valor_total: valorTotal.toFixed(2)
-        }));
-        return;
-      }
-    }
-    
-    if (name === 'quantidade') {
-      // Recalcular o valor total quando a quantidade muda
-      const quantidade = parseFloat(value) || 0;
-      const materialSelecionado = materiais.find(m => m.id === materialForm.material_id);
-      
-      if (materialSelecionado) {
-        const valorTotal = quantidade * parseFloat(materialSelecionado.preco_unitario || 0);
-        
-        setMaterialForm(prev => ({
-          ...prev,
-          [name]: value,
-          valor_total: valorTotal.toFixed(2)
-        }));
-        return;
-      }
-    }
-    
-    // Para outros campos, apenas atualizar o valor
-    setMaterialForm(prev => ({
-      ...prev,
-      [name]: value
-    }));
-  };
-
   // Abrir modal para editar etapa
   const openEditModal = (etapa) => {
     setFormData({
@@ -645,13 +446,28 @@ const EtapasObra = ({ obraId, onOrcamentoChange, onProgressoChange }) => {
       valor_realizado: etapa.valor_realizado || 0,
       progresso_automatico: etapa.progresso_automatico || false
     });
+    setCurrentEtapa(etapa);
     setEditMode(true);
     setActiveTab('info');
     setShowModal(true);
-    
-    // Carregar materiais disponíveis e materiais da etapa
-    fetchMateriais();
-    fetchMateriaisEtapa(etapa.id);
+  };
+
+  // Fechar modal
+  const closeModal = () => {
+    setShowModal(false);
+    setCurrentEtapa(null);
+    setFormData({
+      nome: '',
+      descricao: '',
+      data_inicio: '',
+      data_fim: '',
+      status: 'pendente',
+      progresso: 0,
+      estimativa_horas: 0,
+      valor_previsto: 0,
+      valor_realizado: 0,
+      progresso_automatico: false
+    });
   };
 
   // Abrir modal para criar nova etapa
@@ -670,11 +486,7 @@ const EtapasObra = ({ obraId, onOrcamentoChange, onProgressoChange }) => {
     });
     setEditMode(false);
     setActiveTab('info');
-    setMateriaisEtapa([]);
     setShowModal(true);
-    
-    // Carregar materiais disponíveis
-    fetchMateriais();
   };
 
   // Atualizar progresso automático de todas as etapas configuradas
@@ -1127,21 +939,7 @@ const EtapasObra = ({ obraId, onOrcamentoChange, onProgressoChange }) => {
                 <div className="flex justify-end space-x-3 pt-4">
                 <button
                   type="button"
-                    onClick={() => {
-                      setShowModal(false);
-                      setFormData({
-                        nome: '',
-                        descricao: '',
-                        data_inicio: '',
-                        data_fim: '',
-                        status: 'pendente',
-                        progresso: 0,
-                        estimativa_horas: 0,
-                        valor_previsto: 0,
-                        valor_realizado: 0,
-                        progresso_automatico: false
-                      });
-                    }}
+                    onClick={closeModal}
                     className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
                 >
                   Cancelar
@@ -1167,218 +965,82 @@ const EtapasObra = ({ obraId, onOrcamentoChange, onProgressoChange }) => {
             {/* Conteúdo da aba de Materiais */}
             {activeTab === 'materiais' && (
               <div>
-                <div className="mb-6">
-                  <h3 className="text-lg font-medium mb-2">Adicionar Material</h3>
-                  <form onSubmit={handleAddMaterial} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="md:col-span-2">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Material
-                      </label>
-                      <select
-                        name="material_id"
-                        value={materialForm.material_id}
-                        onChange={handleMaterialFormChange}
-                        className="w-full border border-gray-300 rounded-md px-3 py-2"
-                        required
-                      >
-                        <option value="">Selecione um material</option>
-                        {materiais.map(material => (
-                          <option key={material.id} value={material.id}>
-                            {material.nome} - {material.fornecedores?.nome || 'Sem fornecedor'} (R$ {parseFloat(material.preco_unitario).toFixed(2)}/{material.unidade})
-                          </option>
-                        ))}
-                      </select>
-          </div>
-                    
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Quantidade
-                      </label>
-                      <input
-                        type="number"
-                        name="quantidade"
-                        value={materialForm.quantidade}
-                        onChange={handleMaterialFormChange}
-                        className="w-full border border-gray-300 rounded-md px-3 py-2"
-                        min="0.01"
-                        step="0.01"
-                        required
-                      />
-        </div>
-                    
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Valor Total (R$)
-                      </label>
-                      <input
-                        type="number"
-                        name="valor_total"
-                        value={materialForm.valor_total}
-                        onChange={handleMaterialFormChange}
-                        className="w-full border border-gray-300 rounded-md px-3 py-2"
-                        min="0"
-                        step="0.01"
-                        required
-                      />
+                {currentEtapa ? (
+                  <EtapaMateriais 
+                    etapaId={currentEtapa.id} 
+                    obraId={obraId} 
+                    onUpdate={async () => {
+                      try {
+                        // Recarregar etapas para atualizar os valores
+                        await fetchEtapas();
+                        
+                        // Buscar a etapa atual atualizada
+                        const { data: etapaAtualizada, error: etapaError } = await supabase
+                          .from('etapas_obra')
+                          .select('*')
+                          .eq('id', currentEtapa.id)
+                          .single();
+                          
+                        if (etapaError) throw etapaError;
+                        
+                        // Atualizar o estado do formulário com os novos valores
+                        setFormData(prev => ({
+                          ...prev,
+                          valor_realizado: etapaAtualizada.valor_realizado
+                        }));
+
+                        // Se o progresso é automático, atualizar o progresso
+                        if (etapaAtualizada.progresso_automatico) {
+                          const novoProgresso = calcularProgressoFinanceiro(
+                            etapaAtualizada.valor_realizado || 0,
+                            etapaAtualizada.valor_previsto || 0
+                          );
+
+                          // Atualizar o progresso no banco de dados
+                          const { error: updateError } = await supabase
+                            .from('etapas_obra')
+                            .update({
+                              progresso: novoProgresso
+                            })
+                            .eq('id', etapaAtualizada.id);
+
+                          if (updateError) throw updateError;
+
+                          // Atualizar o formulário com o novo progresso
+                          setFormData(prev => ({
+                            ...prev,
+                            valor_realizado: etapaAtualizada.valor_realizado,
+                            progresso: novoProgresso
+                          }));
+
+                          // Recarregar etapas novamente para refletir a mudança no progresso
+                          await fetchEtapas();
+                        }
+                        
+                        // Notificar sobre mudança no progresso
+                        if (onProgressoChange) {
+                          onProgressoChange();
+                        }
+                      } catch (error) {
+                        console.error('Erro ao atualizar etapa após mudança nos materiais:', error);
+                        setError('Erro ao atualizar etapa. Por favor, tente novamente.');
+                      }
+                    }}
+                  />
+                ) : (
+                  <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4">
+                    <div className="flex">
+                      <div className="flex-shrink-0">
+                        <FaExclamationTriangle className="h-5 w-5 text-yellow-400" />
+                      </div>
+                      <div className="ml-3">
+                        <p className="text-sm text-yellow-700">
+                          Selecione uma etapa para gerenciar seus materiais.
+                        </p>
+                      </div>
                     </div>
-                    
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Data da Compra
-                      </label>
-                      <input
-                        type="date"
-                        name="data_compra"
-                        value={materialForm.data_compra}
-                        onChange={handleMaterialFormChange}
-                        className="w-full border border-gray-300 rounded-md px-3 py-2"
-                      />
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Nota Fiscal
-                      </label>
-                      <input
-                        type="text"
-                        name="nota_fiscal"
-                        value={materialForm.nota_fiscal}
-                        onChange={handleMaterialFormChange}
-                        className="w-full border border-gray-300 rounded-md px-3 py-2"
-                        placeholder="Número da NF"
-                      />
-                    </div>
-                    
-                    <div className="md:col-span-2">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Observações
-                      </label>
-                      <textarea
-                        name="observacoes"
-                        value={materialForm.observacoes}
-                        onChange={handleMaterialFormChange}
-                        className="w-full border border-gray-300 rounded-md px-3 py-2"
-                        rows="2"
-                      />
-                    </div>
-                    
-                    <div className="md:col-span-2 flex justify-end">
-                      <button
-                        type="submit"
-                        className="px-4 py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700 flex items-center"
-                        disabled={loadingMateriais}
-                      >
-                        {loadingMateriais ? (
-                          <div className="flex items-center">
-                            <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
-                            <span>Adicionando...</span>
-                          </div>
-                        ) : (
-                          <>
-                            <FaPlus className="mr-2" /> Adicionar Material
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </form>
-                </div>
-                
-                <div>
-                  <h3 className="text-lg font-medium mb-2">Materiais Utilizados</h3>
-                  {loadingMateriais ? (
-                    <div className="flex items-center justify-center p-4">
-                      <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-blue-500"></div>
-                    </div>
-                  ) : materiaisEtapa.length === 0 ? (
-                    <div className="text-center py-4 bg-gray-50 rounded-lg">
-                      <p className="text-gray-500">Nenhum material adicionado</p>
-                    </div>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
-                          <tr>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Material
-                            </th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Fornecedor
-                            </th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Quantidade
-                            </th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Valor Total
-                            </th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Data
-                            </th>
-                            <th scope="col" className="relative px-6 py-3">
-                              <span className="sr-only">Ações</span>
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                          {materiaisEtapa.map(item => (
-                            <tr key={item.id}>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                {item.material?.nome || 'Material não encontrado'}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                {item.material?.fornecedores?.nome || 'Sem fornecedor'}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                {item.quantidade} {item.material?.unidade}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                {formatCurrency(item.valor_total)}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                {item.data_compra ? new Date(item.data_compra).toLocaleDateString('pt-BR') : '-'}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                <button
-                                  onClick={() => handleRemoveMaterial(item.id)}
-                                  className="text-red-600 hover:text-red-900"
-                                >
-                                  Remover
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                        <tfoot>
-                          <tr className="bg-gray-50">
-                            <td colSpan="3" className="px-6 py-3 text-right text-sm font-medium text-gray-900">
-                              Total:
-                            </td>
-                            <td className="px-6 py-3 text-left text-sm font-medium text-gray-900">
-                              {formatCurrency(materiaisEtapa.reduce((total, item) => total + parseFloat(item.valor_total || 0), 0))}
-                            </td>
-                            <td colSpan="2"></td>
-                          </tr>
-                        </tfoot>
-                      </table>
-                    </div>
-                  )}
-                </div>
-                
-                <div className="flex justify-end space-x-3 pt-6">
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('info')}
-                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
-                  >
-                    Voltar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowModal(false)}
-                    className="px-4 py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700"
-                  >
-                    Fechar
-                  </button>
-                </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

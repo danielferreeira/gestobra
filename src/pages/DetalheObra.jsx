@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   FaArrowLeft, FaEdit, FaTrash, FaBuilding, FaCalendarAlt, 
-  FaMoneyBillWave, FaUser, FaExclamationTriangle, FaBolt, FaSpinner
+  FaMoneyBillWave, FaUser, FaExclamationTriangle, FaBolt, FaSpinner, FaBoxes
 } from 'react-icons/fa';
 import { supabase } from '../services/supabaseClient';
 import DetalhesObra from '../components/DetalhesObra';
@@ -10,6 +10,7 @@ import EtapasObra from '../components/EtapasObra';
 import DocumentosObra from '../components/DocumentosObra';
 import CronogramaObra from '../components/CronogramaObra';
 import OrcamentoObra from '../components/OrcamentoObra';
+import QuantitativoMateriais from '../components/QuantitativoMateriais';
 import { calcularTotalPrevisto, calcularTotalRealizado, calcularProgressoGeral, getEtapasByObraId } from '../services/etapasService';
 import { getDespesasByObraId } from '../services/despesasService';
 
@@ -391,98 +392,120 @@ const DetalheObra = () => {
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="container mx-auto px-4">
         {/* Cabeçalho */}
-        <div className="flex justify-between items-center mb-6">
-          <div className="flex items-center">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+          <div className="flex items-center mb-4 md:mb-0">
             <button
               onClick={() => navigate('/obras')}
-              className="mr-4 text-gray-600 hover:text-gray-900 transition-colors"
+              className="mr-4 text-gray-600 hover:text-gray-900"
             >
               <FaArrowLeft size={20} />
             </button>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">{obra.nome}</h1>
-            </div>
+            <h1 className="text-2xl font-bold text-gray-800">
+              {obra?.nome || 'Carregando...'}
+            </h1>
           </div>
-          <div className="flex space-x-3">
-            <button
-              onClick={() => {}} // Placeholder para diagnóstico
-              className="text-gray-600 hover:text-gray-900 px-4 py-2 rounded-md flex items-center"
-            >
-              <FaBolt className="mr-2" /> Diagnóstico
-            </button>
+          <div className="flex space-x-2">
             <button
               onClick={() => setShowModal(true)}
-              className="bg-blue-600 text-white px-4 py-2 rounded-md flex items-center hover:bg-blue-700 transition-colors"
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md flex items-center"
+              disabled={loading}
             >
               <FaEdit className="mr-2" /> Editar
             </button>
             <button
               onClick={handleDelete}
-              className="bg-red-600 text-white px-4 py-2 rounded-md flex items-center hover:bg-red-700 transition-colors"
+              className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md flex items-center"
+              disabled={loading}
             >
               <FaTrash className="mr-2" /> Excluir
             </button>
           </div>
         </div>
 
-        {/* Tabs de navegação */}
-        <div className="bg-white rounded-lg shadow-sm mb-6">
-          <nav className="flex space-x-4 p-4 border-b">
-            <button
-              onClick={() => setActiveTab('info')}
-              className={`px-3 py-2 rounded-md text-sm font-medium ${
-                activeTab === 'info'
-                  ? 'bg-blue-50 text-blue-700'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              <FaBuilding className="inline mr-2" /> Informações
-            </button>
-            <button
-              onClick={() => setActiveTab('etapas')}
-              className={`px-3 py-2 rounded-md text-sm font-medium ${
-                activeTab === 'etapas'
-                  ? 'bg-blue-50 text-blue-700'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              <FaCalendarAlt className="inline mr-2" /> Etapas
-            </button>
-            <button
-              onClick={() => setActiveTab('cronograma')}
-              className={`px-3 py-2 rounded-md text-sm font-medium ${
-                activeTab === 'cronograma'
-                  ? 'bg-blue-50 text-blue-700'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              <FaCalendarAlt className="inline mr-2" /> Cronograma
-            </button>
-            <button
-              onClick={() => setActiveTab('orcamento')}
-              className={`px-3 py-2 rounded-md text-sm font-medium ${
-                activeTab === 'orcamento'
-                  ? 'bg-blue-50 text-blue-700'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              <FaMoneyBillWave className="inline mr-2" /> Orçamento
-            </button>
-            <button
-              onClick={() => setActiveTab('documentos')}
-              className={`px-3 py-2 rounded-md text-sm font-medium ${
-                activeTab === 'documentos'
-                  ? 'bg-blue-50 text-blue-700'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              <FaUser className="inline mr-2" /> Documentos
-            </button>
-          </nav>
+        {/* Mensagem de erro */}
+        {error && (
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+            <p>{error}</p>
+          </div>
+        )}
 
-          {/* Conteúdo das tabs */}
-          <div className="p-6">
+        {/* Abas */}
+        <div className="mb-6">
+          <div className="border-b border-gray-200">
+            <nav className="-mb-px flex space-x-8 overflow-x-auto">
+              <button
+                className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'info'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+                onClick={() => setActiveTab('info')}
+              >
+                <FaBuilding className="inline-block mr-2" /> Informações
+              </button>
+              <button
+                className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'etapas'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+                onClick={() => setActiveTab('etapas')}
+              >
+                <FaBolt className="inline-block mr-2" /> Etapas
+              </button>
+              <button
+                className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'cronograma'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+                onClick={() => setActiveTab('cronograma')}
+              >
+                <FaCalendarAlt className="inline-block mr-2" /> Cronograma
+              </button>
+              <button
+                className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'orcamento'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+                onClick={() => setActiveTab('orcamento')}
+              >
+                <FaMoneyBillWave className="inline-block mr-2" /> Orçamento
+              </button>
+              <button
+                className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'materiais'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+                onClick={() => setActiveTab('materiais')}
+              >
+                <FaBoxes className="inline-block mr-2" /> Materiais
+              </button>
+              <button
+                className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'documentos'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+                onClick={() => setActiveTab('documentos')}
+              >
+                <FaUser className="inline-block mr-2" /> Documentos
+              </button>
+            </nav>
+          </div>
+        </div>
+
+        {/* Conteúdo da aba */}
+        {loading ? (
+          <div className="flex justify-center items-center h-64">
+            <FaSpinner className="animate-spin text-blue-500 text-4xl" />
+          </div>
+        ) : (
+          <>
             {activeTab === 'info' && <DetalhesObra obra={obra} />}
+            
             {activeTab === 'etapas' && (
               <EtapasObra 
                 obraId={id} 
@@ -490,15 +513,22 @@ const DetalheObra = () => {
                 onProgressoChange={handleProgressoChange}
               />
             )}
+            
             {activeTab === 'cronograma' && <CronogramaObra obraId={id} />}
-            {activeTab === 'orcamento' && <OrcamentoObra 
-              obraId={id} 
-              orcamentoTotal={obra.orcamento} 
-              onTotalGastoChange={handleTotalGastoChange}
-            />}
+            
+            {activeTab === 'orcamento' && (
+              <OrcamentoObra 
+                obraId={id} 
+                orcamentoTotal={obra?.orcamento || 0}
+                onTotalGastoChange={handleTotalGastoChange}
+              />
+            )}
+            
+            {activeTab === 'materiais' && <QuantitativoMateriais obraId={id} />}
+            
             {activeTab === 'documentos' && <DocumentosObra obraId={id} />}
-          </div>
-        </div>
+          </>
+        )}
 
         {/* Modal de Edição */}
         {showModal && (

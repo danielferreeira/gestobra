@@ -183,4 +183,148 @@ export const getHistoricoMaterial = async (materialId) => {
     .order('data', { ascending: false });
   
   return { data, error };
+};
+
+// Buscar materiais por obra
+export const getMaterialsByObraId = async (obraId) => {
+  try {
+    // Verificar se a tabela etapas_materiais existe
+    const { data: tableInfo, error: tableError } = await supabase
+      .from('etapas_materiais')
+      .select('id')
+      .limit(1);
+    
+    // Se a tabela não existir, vamos usar uma abordagem alternativa
+    if (tableError && tableError.code === 'PGRST200') {
+      console.log('Tabela etapas_materiais não encontrada, usando abordagem alternativa');
+      
+      // Verificar se existe a tabela movimentacao_materiais
+      const { data: movData, error: movError } = await supabase
+        .from('movimentacao_materiais')
+        .select(`
+          id,
+          material_id,
+          obra_id,
+          quantidade,
+          tipo,
+          data,
+          descricao,
+          materiais:material_id (
+            id, 
+            nome, 
+            categoria, 
+            unidade, 
+            preco_unitario
+          )
+        `)
+        .eq('obra_id', obraId);
+      
+      if (movError) {
+        throw movError;
+      }
+      
+      return { data: movData || [], error: null };
+    }
+    
+    // Se a tabela existir, mas a relação estiver incorreta, vamos fazer uma consulta mais simples
+    const { data, error } = await supabase
+      .from('etapas_materiais')
+      .select('*')
+      .eq('obra_id', obraId);
+    
+    if (error) {
+      throw error;
+    }
+    
+    // Se não houver erro, mas a consulta não retornar os dados relacionados,
+    // vamos buscar os materiais separadamente
+    if (data && data.length > 0) {
+      // Extrair IDs de materiais
+      const materialIds = [...new Set(data.map(item => item.material_id))];
+      
+      // Buscar detalhes dos materiais
+      const { data: materiaisData, error: materiaisError } = await supabase
+        .from('materiais')
+        .select('*')
+        .in('id', materialIds);
+      
+      if (materiaisError) {
+        throw materiaisError;
+      }
+      
+      // Combinar os dados
+      const combinedData = data.map(item => {
+        const material = materiaisData.find(m => m.id === item.material_id);
+        return {
+          ...item,
+          materiais: material
+        };
+      });
+      
+      return { data: combinedData, error: null };
+    }
+    
+    return { data: data || [], error: null };
+  } catch (error) {
+    console.error('Erro ao buscar materiais por obra:', error);
+    return { data: [], error };
+  }
+};
+
+// Buscar quantitativo total de materiais por obra
+export const getQuantitativoMaterialsByObraId = async (obraId) => {
+  try {
+    // Primeiro, buscar todos os materiais associados a etapas da obra
+    const { data: materiaisEtapas, error } = await getMaterialsByObraId(obraId);
+    
+    if (error) {
+      throw error;
+    }
+    
+    // Agrupar materiais por ID e somar quantidades
+    const quantitativoMap = {};
+    
+    materiaisEtapas.forEach(item => {
+      const material = item.materiais;
+      
+      if (!material) return;
+      
+      if (!quantitativoMap[material.id]) {
+        quantitativoMap[material.id] = {
+          id: material.id,
+          nome: material.nome,
+          categoria: material.categoria,
+          unidade: material.unidade,
+          preco_unitario: material.preco_unitario,
+          quantidade_total: 0,
+          valor_total: 0,
+          etapas: []
+        };
+      }
+      
+      // Adicionar quantidade e valor
+      const quantidade = parseFloat(item.quantidade || 0);
+      quantitativoMap[material.id].quantidade_total += quantidade;
+      
+      // Calcular valor total (preço unitário * quantidade)
+      const valorItem = quantidade * parseFloat(material.preco_unitario || 0);
+      quantitativoMap[material.id].valor_total += valorItem;
+      
+      // Adicionar etapa se disponível e ainda não estiver na lista
+      if (item.etapa_id && !quantitativoMap[material.id].etapas.some(e => e.id === item.etapa_id)) {
+        quantitativoMap[material.id].etapas.push({
+          id: item.etapa_id,
+          nome: item.etapa_nome || `Etapa ${item.etapa_id}`
+        });
+      }
+    });
+    
+    // Converter o mapa em array
+    const quantitativo = Object.values(quantitativoMap);
+    
+    return { data: quantitativo, error: null };
+  } catch (error) {
+    console.error('Erro ao buscar quantitativo de materiais:', error);
+    return { data: [], error };
+  }
 }; 

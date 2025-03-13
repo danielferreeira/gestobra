@@ -25,7 +25,7 @@ const Obras = () => {
   const [statusFilter, setStatusFilter] = useState('todas');
   const [sortBy, setSortBy] = useState('data_inicio');
   const [sortOrder, setSortOrder] = useState('desc');
-  const [viewMode, setViewMode] = useState('table'); // 'table' ou 'cards'
+  const [viewMode, setViewMode] = useState('cards'); // 'table' ou 'cards'
 
   // Carregar obras do Supabase
   useEffect(() => {

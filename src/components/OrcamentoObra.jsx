@@ -14,7 +14,7 @@ const OrcamentoObra = ({ obraId, orcamentoTotal, onTotalGastoChange }) => {
     descricao: '',
     valor: '',
     data: '',
-    categoria: 'material',
+    categoria: 'mao_de_obra',
     status_pagamento: 'pago'
   });
   const [totalGasto, setTotalGasto] = useState(0);
@@ -102,7 +102,6 @@ const OrcamentoObra = ({ obraId, orcamentoTotal, onTotalGastoChange }) => {
   // Obter label da categoria
   const getCategoriaLabel = (categoria) => {
     const categoriaMap = {
-      'material': { label: 'Material', color: 'bg-blue-100 text-blue-800' },
       'mao_de_obra': { label: 'Mão de Obra', color: 'bg-green-100 text-green-800' },
       'equipamento': { label: 'Equipamento', color: 'bg-purple-100 text-purple-800' },
       'servico': { label: 'Serviço', color: 'bg-yellow-100 text-yellow-800' },
@@ -141,7 +140,7 @@ const OrcamentoObra = ({ obraId, orcamentoTotal, onTotalGastoChange }) => {
         descricao: '',
         valor: '',
         data: new Date().toISOString().split('T')[0],
-        categoria: 'material',
+        categoria: 'mao_de_obra',
         status_pagamento: 'pago'
       });
     }
@@ -586,7 +585,6 @@ const OrcamentoObra = ({ obraId, orcamentoTotal, onTotalGastoChange }) => {
                   className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
                   required
                 >
-                  <option value="material">Material</option>
                   <option value="mao_de_obra">Mão de Obra</option>
                   <option value="equipamento">Equipamento</option>
                   <option value="servico">Serviço</option>
