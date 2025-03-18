@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { FaPlus, FaEdit, FaTrash, FaExclamationTriangle, FaSearch, FaBuilding, FaTools } from 'react-icons/fa';
+import { FaPlus, FaEdit, FaTrash, FaExclamationTriangle, FaSearch, FaBuilding, FaTools, FaCloudUploadAlt } from 'react-icons/fa';
 import { supabase } from '../services/supabaseClient';
 import { useNavigate } from 'react-router-dom';
 import { toast, Toaster } from 'react-hot-toast';
+import UploadOrcamento from '../components/UploadOrcamento';
 
 const Fornecedores = () => {
   const navigate = useNavigate();
@@ -13,6 +14,7 @@ const Fornecedores = () => {
   const [materiais, setMateriais] = useState([]);
   const [showModalFornecedor, setShowModalFornecedor] = useState(false);
   const [showModalMaterial, setShowModalMaterial] = useState(false);
+  const [showModalUpload, setShowModalUpload] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   
@@ -194,6 +196,35 @@ const Fornecedores = () => {
     });
     setEditMode(true);
     setShowModalMaterial(true);
+  };
+
+  // Abrir modal para upload de orçamento
+  const openUploadModal = () => {
+    setShowModalUpload(true);
+  };
+
+  // Manipular resultado do upload de orçamento
+  const handleUploadSuccess = async (resultado) => {
+    try {
+      setLoading(true);
+      
+      // Recarregar fornecedores e materiais após o upload bem-sucedido
+      await fetchFornecedores();
+      await fetchMateriais();
+      
+      toast.success(`${resultado.materiais.length} materiais processados com sucesso!`);
+      
+      // Fechar o modal após alguns segundos
+      setTimeout(() => {
+        setShowModalUpload(false);
+      }, 3000);
+      
+    } catch (error) {
+      console.error('Erro ao processar resultados do upload:', error);
+      toast.error('Erro ao processar resultados do upload');
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Salvar fornecedor (criar ou atualizar)
@@ -505,7 +536,13 @@ const Fornecedores = () => {
         {/* Conteúdo da aba de Materiais */}
         {activeTab === 'materiais' && (
           <div>
-            <div className="flex justify-end mb-4">
+            <div className="flex justify-end mb-4 space-x-2">
+              <button
+                onClick={openUploadModal}
+                className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 flex items-center"
+              >
+                <FaCloudUploadAlt className="mr-2" /> Upload de Orçamento
+              </button>
               <button
                 onClick={openCreateMaterialModal}
                 className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 flex items-center"
@@ -829,6 +866,37 @@ const Fornecedores = () => {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+        
+        {/* Modal de Upload de Orçamento */}
+        {showModalUpload && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 w-full max-w-xl">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-semibold">
+                  Upload de Orçamento
+                </h2>
+                <button
+                  onClick={() => setShowModalUpload(false)}
+                  className="text-gray-400 hover:text-gray-500"
+                >
+                  &times;
+                </button>
+              </div>
+              
+              <UploadOrcamento onSuccess={handleUploadSuccess} />
+              
+              <div className="flex justify-end mt-6">
+                <button
+                  type="button"
+                  onClick={() => setShowModalUpload(false)}
+                  className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+                >
+                  Fechar
+                </button>
+              </div>
             </div>
           </div>
         )}

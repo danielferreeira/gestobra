@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { FaPlus, FaSearch, FaEdit, FaTrash, FaEye, FaBoxes } from 'react-icons/fa';
+import { FaPlus, FaSearch, FaEdit, FaTrash, FaEye, FaBoxes, FaCloudUploadAlt } from 'react-icons/fa';
 import { getMateriais, createMaterial, updateMaterial, deleteMaterial } from '../services/materiaisService';
+import UploadOrcamento from '../components/UploadOrcamento';
 
 const Materiais = () => {
   const [materiais, setMateriais] = useState([]);
@@ -9,6 +10,7 @@ const Materiais = () => {
   const [currentMaterial, setCurrentMaterial] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [modalTab, setModalTab] = useState('manual'); // 'manual' ou 'upload'
   const [formData, setFormData] = useState({
     nome: '',
     categoria: '',
@@ -63,7 +65,7 @@ const Materiais = () => {
   };
 
   // Abrir modal para adicionar/editar material
-  const openModal = (material = null) => {
+  const openModal = (material = null, tab = 'manual') => {
     if (material) {
       setCurrentMaterial(material);
       setFormData({
@@ -75,6 +77,7 @@ const Materiais = () => {
         estoque_minimo: material.estoque_minimo,
         fornecedor: material.fornecedor || ''
       });
+      setModalTab('manual'); // Quando editando, sempre mostrar a aba manual
     } else {
       setCurrentMaterial(null);
       setFormData({
@@ -86,6 +89,7 @@ const Materiais = () => {
         estoque_minimo: '',
         fornecedor: ''
       });
+      setModalTab(tab);
     }
     setShowModal(true);
   };
@@ -167,6 +171,33 @@ const Materiais = () => {
     }
   };
 
+  // Manipular resultado do upload de orçamento
+  const handleUploadSuccess = async (resultado) => {
+    try {
+      setLoading(true);
+      
+      // Atualizar lista de materiais após upload bem-sucedido
+      const { data: updatedMateriais, error } = await getMateriais();
+      
+      if (error) {
+        throw error;
+      }
+      
+      setMateriais(updatedMateriais || []);
+      
+      // Fechar o modal após processamento bem-sucedido
+      setTimeout(() => {
+        setShowModal(false);
+      }, 3000);
+      
+    } catch (error) {
+      console.error('Erro ao atualizar após upload:', error);
+      setError('Erro ao atualizar dados após upload: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   if (loading && materiais.length === 0) {
     return (
       <div className="flex justify-center items-center h-full">
@@ -188,13 +219,22 @@ const Materiais = () => {
       {/* Cabeçalho */}
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold text-gray-800">Gestão de Materiais</h1>
-        <button
-          onClick={() => openModal()}
-          className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md flex items-center"
-          disabled={loading}
-        >
-          <FaPlus className="mr-2" /> Novo Material
-        </button>
+        <div className="flex space-x-2">
+          <button
+            onClick={() => openModal(null, 'upload')}
+            className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-md flex items-center"
+            disabled={loading}
+          >
+            <FaCloudUploadAlt className="mr-2" /> Upload de Orçamento
+          </button>
+          <button
+            onClick={() => openModal(null, 'manual')}
+            className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md flex items-center"
+            disabled={loading}
+          >
+            <FaPlus className="mr-2" /> Novo Material
+          </button>
+        </div>
       </div>
 
       {/* Barra de pesquisa */}
@@ -284,7 +324,11 @@ const Materiais = () => {
           <div className="relative top-20 mx-auto p-5 border w-full max-w-md shadow-lg rounded-md bg-white">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-medium text-gray-900">
-                {currentMaterial ? 'Editar Material' : 'Adicionar Material'}
+                {currentMaterial 
+                  ? 'Editar Material' 
+                  : modalTab === 'manual' 
+                    ? 'Adicionar Material' 
+                    : 'Upload de Orçamento'}
               </h3>
               <button
                 onClick={closeModal}
@@ -294,134 +338,184 @@ const Materiais = () => {
               </button>
             </div>
             
-            <form onSubmit={handleSubmit}>
-              <div className="space-y-4">
-                <div>
-                  <label htmlFor="nome" className="block text-sm font-medium text-gray-700">Nome</label>
-                  <input
-                    type="text"
-                    id="nome"
-                    name="nome"
-                    value={formData.nome}
-                    onChange={handleChange}
-                    required
-                    className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                  />
-                </div>
-                
-                <div>
-                  <label htmlFor="categoria" className="block text-sm font-medium text-gray-700">Categoria</label>
-                  <input
-                    type="text"
-                    id="categoria"
-                    name="categoria"
-                    value={formData.categoria}
-                    onChange={handleChange}
-                    required
-                    className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                  />
-                </div>
-                
-                <div className="grid grid-cols-2 gap-4">
+            {/* Abas do modal */}
+            {!currentMaterial && (
+              <div className="border-b border-gray-200 mb-4">
+                <nav className="flex space-x-4">
+                  <button
+                    className={`py-2 px-1 border-b-2 font-medium ${
+                      modalTab === 'manual'
+                        ? 'border-blue-500 text-blue-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700'
+                    }`}
+                    onClick={() => setModalTab('manual')}
+                  >
+                    Cadastro Manual
+                  </button>
+                  <button
+                    className={`py-2 px-1 border-b-2 font-medium ${
+                      modalTab === 'upload'
+                        ? 'border-blue-500 text-blue-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700'
+                    }`}
+                    onClick={() => setModalTab('upload')}
+                  >
+                    Upload de Orçamento
+                  </button>
+                </nav>
+              </div>
+            )}
+            
+            {/* Conteúdo da aba de cadastro manual */}
+            {modalTab === 'manual' && (
+              <form onSubmit={handleSubmit}>
+                <div className="space-y-4">
                   <div>
-                    <label htmlFor="unidade" className="block text-sm font-medium text-gray-700">Unidade</label>
-                    <select
-                      id="unidade"
-                      name="unidade"
-                      value={formData.unidade}
-                      onChange={handleChange}
-                      required
-                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                    >
-                      <option value="un">Unidade (un)</option>
-                      <option value="kg">Quilograma (kg)</option>
-                      <option value="m">Metro (m)</option>
-                      <option value="m²">Metro Quadrado (m²)</option>
-                      <option value="m³">Metro Cúbico (m³)</option>
-                      <option value="l">Litro (l)</option>
-                      <option value="pç">Peça (pç)</option>
-                      <option value="cx">Caixa (cx)</option>
-                      <option value="sc">Saco (sc)</option>
-                    </select>
-                  </div>
-                  
-                  <div>
-                    <label htmlFor="preco_unitario" className="block text-sm font-medium text-gray-700">Preço Unitário (R$)</label>
+                    <label htmlFor="nome" className="block text-sm font-medium text-gray-700">Nome</label>
                     <input
-                      type="number"
-                      id="preco_unitario"
-                      name="preco_unitario"
-                      value={formData.preco_unitario}
+                      type="text"
+                      id="nome"
+                      name="nome"
+                      value={formData.nome}
                       onChange={handleChange}
                       required
-                      min="0"
-                      step="0.01"
-                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                    />
-                  </div>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label htmlFor="quantidade_estoque" className="block text-sm font-medium text-gray-700">Quantidade em Estoque</label>
-                    <input
-                      type="number"
-                      id="quantidade_estoque"
-                      name="quantidade_estoque"
-                      value={formData.quantidade_estoque}
-                      onChange={handleChange}
-                      required
-                      min="0"
                       className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                     />
                   </div>
                   
                   <div>
-                    <label htmlFor="estoque_minimo" className="block text-sm font-medium text-gray-700">Estoque Mínimo</label>
+                    <label htmlFor="categoria" className="block text-sm font-medium text-gray-700">Categoria</label>
                     <input
-                      type="number"
-                      id="estoque_minimo"
-                      name="estoque_minimo"
-                      value={formData.estoque_minimo}
+                      type="text"
+                      id="categoria"
+                      name="categoria"
+                      value={formData.categoria}
                       onChange={handleChange}
                       required
-                      min="0"
+                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                    />
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label htmlFor="unidade" className="block text-sm font-medium text-gray-700">Unidade</label>
+                      <select
+                        id="unidade"
+                        name="unidade"
+                        value={formData.unidade}
+                        onChange={handleChange}
+                        required
+                        className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      >
+                        <option value="un">Unidade (un)</option>
+                        <option value="kg">Quilograma (kg)</option>
+                        <option value="m">Metro (m)</option>
+                        <option value="m²">Metro Quadrado (m²)</option>
+                        <option value="m³">Metro Cúbico (m³)</option>
+                        <option value="l">Litro (l)</option>
+                        <option value="pç">Peça (pç)</option>
+                        <option value="cx">Caixa (cx)</option>
+                        <option value="sc">Saco (sc)</option>
+                      </select>
+                    </div>
+                    
+                    <div>
+                      <label htmlFor="preco_unitario" className="block text-sm font-medium text-gray-700">Preço Unitário (R$)</label>
+                      <input
+                        type="number"
+                        id="preco_unitario"
+                        name="preco_unitario"
+                        value={formData.preco_unitario}
+                        onChange={handleChange}
+                        required
+                        min="0"
+                        step="0.01"
+                        className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label htmlFor="quantidade_estoque" className="block text-sm font-medium text-gray-700">Quantidade em Estoque</label>
+                      <input
+                        type="number"
+                        id="quantidade_estoque"
+                        name="quantidade_estoque"
+                        value={formData.quantidade_estoque}
+                        onChange={handleChange}
+                        required
+                        min="0"
+                        className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label htmlFor="estoque_minimo" className="block text-sm font-medium text-gray-700">Estoque Mínimo</label>
+                      <input
+                        type="number"
+                        id="estoque_minimo"
+                        name="estoque_minimo"
+                        value={formData.estoque_minimo}
+                        onChange={handleChange}
+                        required
+                        min="0"
+                        className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      />
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <label htmlFor="fornecedor" className="block text-sm font-medium text-gray-700">Fornecedor</label>
+                    <input
+                      type="text"
+                      id="fornecedor"
+                      name="fornecedor"
+                      value={formData.fornecedor}
+                      onChange={handleChange}
                       className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                     />
                   </div>
                 </div>
                 
-                <div>
-                  <label htmlFor="fornecedor" className="block text-sm font-medium text-gray-700">Fornecedor</label>
-                  <input
-                    type="text"
-                    id="fornecedor"
-                    name="fornecedor"
-                    value={formData.fornecedor}
-                    onChange={handleChange}
-                    className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                  />
+                <div className="mt-5 sm:mt-6 sm:grid sm:grid-cols-2 sm:gap-3 sm:grid-flow-row-dense">
+                  <button
+                    type="submit"
+                    className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:col-start-2 sm:text-sm"
+                    disabled={loading}
+                  >
+                    {loading ? 'Salvando...' : 'Salvar'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={closeModal}
+                    className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:mt-0 sm:col-start-1 sm:text-sm"
+                    disabled={loading}
+                  >
+                    Cancelar
+                  </button>
                 </div>
-              </div>
-              
-              <div className="mt-5 sm:mt-6 sm:grid sm:grid-cols-2 sm:gap-3 sm:grid-flow-row-dense">
-                <button
-                  type="submit"
-                  className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:col-start-2 sm:text-sm"
-                  disabled={loading}
-                >
-                  {loading ? 'Salvando...' : 'Salvar'}
-                </button>
-                <button
-                  type="button"
-                  onClick={closeModal}
-                  className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:mt-0 sm:col-start-1 sm:text-sm"
-                  disabled={loading}
-                >
-                  Cancelar
-                </button>
-              </div>
-            </form>
+              </form>
+            )}
+            
+            {/* Conteúdo da aba de upload de orçamento */}
+            {modalTab === 'upload' && (
+              <>
+                <UploadOrcamento 
+                  onSuccess={handleUploadSuccess}
+                />
+                
+                <div className="flex justify-end mt-6">
+                  <button
+                    type="button"
+                    onClick={closeModal}
+                    className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded"
+                  >
+                    Fechar
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
