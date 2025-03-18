@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { FaPlus, FaEdit, FaTrash, FaArrowUp, FaArrowDown, FaLink, FaUnlink, FaCheckSquare, FaExclamationTriangle, FaClock, FaCalculator, FaBoxes } from 'react-icons/fa';
+import { FaPlus, FaEdit, FaTrash, FaArrowUp, FaArrowDown, FaLink, FaUnlink, FaCheckSquare, FaExclamationTriangle, FaClock, FaCalculator, FaBoxes, FaList } from 'react-icons/fa';
 import { supabase } from '../services/supabaseClient';
 import EtapaMateriais from './EtapaMateriais';
+import { criarEtapasPadrao } from '../services/etapasService';
 
 const EtapasObra = ({ obraId, onOrcamentoChange, onProgressoChange }) => {
   const [etapas, setEtapas] = useState([]);
@@ -16,14 +17,15 @@ const EtapasObra = ({ obraId, onOrcamentoChange, onProgressoChange }) => {
     nome: '',
     descricao: '',
     data_inicio: '',
-    data_fim: '',
+    data_previsao_termino: '',
     status: 'pendente',
     progresso: 0,
-    estimativa_horas: 0,
     valor_previsto: 0,
     valor_realizado: 0,
     progresso_automatico: false
   });
+  const [regeneratingEtapas, setRegeneratingEtapas] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
 
   // Função para formatar moeda
   const formatCurrency = (value) => {
@@ -44,7 +46,10 @@ const EtapasObra = ({ obraId, onOrcamentoChange, onProgressoChange }) => {
   const calcularProgressoFinanceiro = (valorRealizado, valorPrevisto) => {
     if (!valorPrevisto || valorPrevisto <= 0) return 0;
     const progresso = (valorRealizado / valorPrevisto) * 100;
-    return Math.min(Math.round(progresso), 100); // Limita a 100% e arredonda
+    
+    // Para exibição no formulário, podemos manter precisão decimal para valores pequenos
+    // mas para salvar no banco, vamos tratar isso no momento do update
+    return progresso;
   };
 
   // Função para atualizar o progresso automaticamente
@@ -85,8 +90,10 @@ const EtapasObra = ({ obraId, onOrcamentoChange, onProgressoChange }) => {
     
     // Para campos numéricos, converta para número ou use string vazia
     if (type === 'number') {
-      const numberValue = value === '' ? '' : name === 'progresso' ? 
-        parseInt(value) : parseFloat(value);
+      const isProgressField = name === 'progresso';
+      // Para o campo progresso, garantir que é inteiro
+      const numberValue = value === '' ? '' : isProgressField ? 
+        Math.round(parseInt(value)) : parseFloat(value);
       
       setFormData(prev => {
         const newData = {
@@ -100,7 +107,16 @@ const EtapasObra = ({ obraId, onOrcamentoChange, onProgressoChange }) => {
           const valorRealizado = name === 'valor_realizado' ? numberValue : prev.valor_realizado;
           const valorPrevisto = name === 'valor_previsto' ? numberValue : prev.valor_previsto;
           
-          newData.progresso = calcularProgressoFinanceiro(valorRealizado, valorPrevisto);
+          let novoProgresso = calcularProgressoFinanceiro(valorRealizado, valorPrevisto);
+          
+          // Garantir que seja inteiro para o banco
+          if (valorRealizado > 0 && novoProgresso < 1) {
+            novoProgresso = 1;
+          } else {
+            novoProgresso = Math.round(novoProgresso);
+          }
+          
+          newData.progresso = novoProgresso;
         }
         
         return newData;
@@ -228,19 +244,22 @@ const EtapasObra = ({ obraId, onOrcamentoChange, onProgressoChange }) => {
       // Garantir que as datas estejam no formato correto
       if (etapaData.data_inicio) {
         etapaData.data_inicio = new Date(etapaData.data_inicio).toISOString();
+      } else {
+        etapaData.data_inicio = null; // Usar null ao invés de string vazia
       }
       
-      if (etapaData.data_fim) {
-        etapaData.data_fim = new Date(etapaData.data_fim).toISOString();
+      if (etapaData.data_previsao_termino) {
+        etapaData.data_previsao_termino = new Date(etapaData.data_previsao_termino).toISOString();
+      } else {
+        etapaData.data_previsao_termino = null; // Usar null ao invés de string vazia
       }
       
       // Tratar campos numéricos vazios
       if (etapaData.progresso === '') {
         etapaData.progresso = null;
-      }
-      
-      if (etapaData.estimativa_horas === '') {
-        etapaData.estimativa_horas = null;
+      } else if (etapaData.progresso !== null) {
+        // Garantir que o progresso é um inteiro
+        etapaData.progresso = Math.round(Number(etapaData.progresso));
       }
       
       if (etapaData.valor_previsto === '') {
@@ -250,6 +269,8 @@ const EtapasObra = ({ obraId, onOrcamentoChange, onProgressoChange }) => {
       if (etapaData.valor_realizado === '') {
         etapaData.valor_realizado = null;
       }
+
+      console.log('Criando nova etapa:', etapaData);
 
       const { error } = await supabase
         .from('etapas_obra')
@@ -263,10 +284,9 @@ const EtapasObra = ({ obraId, onOrcamentoChange, onProgressoChange }) => {
         nome: '',
         descricao: '',
         data_inicio: '',
-        data_fim: '',
+        data_previsao_termino: '',
         status: 'pendente',
         progresso: 0,
-        estimativa_horas: 0,
         valor_previsto: 0,
         valor_realizado: 0,
         progresso_automatico: false
@@ -278,7 +298,7 @@ const EtapasObra = ({ obraId, onOrcamentoChange, onProgressoChange }) => {
       }
     } catch (error) {
       console.error('Erro ao salvar etapa:', error);
-      setError('Erro ao salvar etapa. Por favor, tente novamente.');
+      setError('Erro ao salvar etapa: ' + (error.message || 'Por favor, tente novamente.'));
     } finally {
       setLoading(false);
     }
@@ -301,19 +321,22 @@ const EtapasObra = ({ obraId, onOrcamentoChange, onProgressoChange }) => {
       // Garantir que as datas estejam no formato correto
       if (etapaData.data_inicio) {
         etapaData.data_inicio = new Date(etapaData.data_inicio).toISOString();
+      } else {
+        etapaData.data_inicio = null; // Usar null ao invés de string vazia
       }
       
-      if (etapaData.data_fim) {
-        etapaData.data_fim = new Date(etapaData.data_fim).toISOString();
+      if (etapaData.data_previsao_termino) {
+        etapaData.data_previsao_termino = new Date(etapaData.data_previsao_termino).toISOString();
+      } else {
+        etapaData.data_previsao_termino = null; // Usar null ao invés de string vazia
       }
       
       // Tratar campos numéricos vazios
       if (etapaData.progresso === '') {
         etapaData.progresso = null;
-      }
-      
-      if (etapaData.estimativa_horas === '') {
-        etapaData.estimativa_horas = null;
+      } else if (etapaData.progresso !== null) {
+        // Garantir que o progresso é um inteiro
+        etapaData.progresso = Math.round(Number(etapaData.progresso));
       }
       
       if (etapaData.valor_previsto === '') {
@@ -323,6 +346,8 @@ const EtapasObra = ({ obraId, onOrcamentoChange, onProgressoChange }) => {
       if (etapaData.valor_realizado === '') {
         etapaData.valor_realizado = null;
       }
+
+      console.log('Dados a serem enviados:', etapaData);
 
       const { error } = await supabase
         .from('etapas_obra')
@@ -337,10 +362,9 @@ const EtapasObra = ({ obraId, onOrcamentoChange, onProgressoChange }) => {
         nome: '',
         descricao: '',
         data_inicio: '',
-        data_fim: '',
+        data_previsao_termino: '',
         status: 'pendente',
         progresso: 0,
-        estimativa_horas: 0,
         valor_previsto: 0,
         valor_realizado: 0,
         progresso_automatico: false
@@ -352,7 +376,7 @@ const EtapasObra = ({ obraId, onOrcamentoChange, onProgressoChange }) => {
       }
     } catch (error) {
       console.error('Erro ao atualizar etapa:', error);
-      setError('Erro ao atualizar etapa. Por favor, tente novamente.');
+      setError('Erro ao atualizar etapa: ' + (error.message || 'Por favor, tente novamente.'));
     } finally {
       setLoading(false);
     }
@@ -438,10 +462,9 @@ const EtapasObra = ({ obraId, onOrcamentoChange, onProgressoChange }) => {
       nome: etapa.nome || '',
       descricao: etapa.descricao || '',
       data_inicio: formatDateForInput(etapa.data_inicio),
-      data_fim: formatDateForInput(etapa.data_fim),
+      data_previsao_termino: formatDateForInput(etapa.data_previsao_termino),
       status: etapa.status || 'pendente',
       progresso: etapa.progresso || 0,
-      estimativa_horas: etapa.estimativa_horas || 0,
       valor_previsto: etapa.valor_previsto || 0,
       valor_realizado: etapa.valor_realizado || 0,
       progresso_automatico: etapa.progresso_automatico || false
@@ -460,10 +483,9 @@ const EtapasObra = ({ obraId, onOrcamentoChange, onProgressoChange }) => {
       nome: '',
       descricao: '',
       data_inicio: '',
-      data_fim: '',
+      data_previsao_termino: '',
       status: 'pendente',
       progresso: 0,
-      estimativa_horas: 0,
       valor_previsto: 0,
       valor_realizado: 0,
       progresso_automatico: false
@@ -476,10 +498,9 @@ const EtapasObra = ({ obraId, onOrcamentoChange, onProgressoChange }) => {
       nome: '',
       descricao: '',
       data_inicio: '',
-      data_fim: '',
+      data_previsao_termino: '',
       status: 'pendente',
       progresso: 0,
-      estimativa_horas: 0,
       valor_previsto: 0,
       valor_realizado: 0,
       progresso_automatico: false
@@ -495,14 +516,31 @@ const EtapasObra = ({ obraId, onOrcamentoChange, onProgressoChange }) => {
       // Filtrar etapas com progresso automático ativado
       const etapasAutomaticas = etapas.filter(etapa => etapa.progresso_automatico);
       
-      if (etapasAutomaticas.length === 0) return;
+      console.log(`Atualizando progresso de ${etapasAutomaticas.length} etapas automáticas`);
+      
+      if (etapasAutomaticas.length === 0) {
+        console.log("Nenhuma etapa com progresso automático encontrada");
+        setSuccessMessage("Não existem etapas configuradas para progresso automático");
+        setTimeout(() => setSuccessMessage(''), 5000);
+        return;
+      }
       
       // Preparar atualizações para cada etapa
       const atualizacoes = etapasAutomaticas.map(etapa => {
-        const novoProgresso = calcularProgressoFinanceiro(
-          etapa.valor_realizado || 0,
-          etapa.valor_previsto || 0
-        );
+        const valorRealizado = etapa.valor_realizado || 0;
+        const valorPrevisto = etapa.valor_previsto || 0;
+        // Calcular o progresso
+        let novoProgresso = calcularProgressoFinanceiro(valorRealizado, valorPrevisto);
+        
+        // Garantir que o valor seja um inteiro para o banco de dados
+        // Para valores muito pequenos, garantir pelo menos 1% se houver algum valor realizado
+        if (valorRealizado > 0 && novoProgresso < 1) {
+          novoProgresso = 1; // Mínimo de 1% se houver valor realizado
+        } else {
+          novoProgresso = Math.round(novoProgresso); // Arredondar para inteiro
+        }
+        
+        console.log(`Etapa ${etapa.id} (${etapa.nome}): Valor realizado=${valorRealizado}, Valor previsto=${valorPrevisto}, Novo progresso=${novoProgresso}%`);
         
         return {
           id: etapa.id,
@@ -515,13 +553,22 @@ const EtapasObra = ({ obraId, onOrcamentoChange, onProgressoChange }) => {
         .from('etapas_obra')
         .upsert(atualizacoes);
       
-      if (error) throw error;
+      if (error) {
+        console.error("Erro ao atualizar progresso no banco:", error);
+        throw error;
+      }
+      
+      console.log("Progresso atualizado com sucesso para todas as etapas");
+      setSuccessMessage("Progresso atualizado com sucesso para todas as etapas!");
+      setTimeout(() => setSuccessMessage(''), 5000);
       
       // Recarregar etapas
       await fetchEtapas();
       
     } catch (error) {
       console.error('Erro ao atualizar progresso automático:', error);
+      setError('Erro ao atualizar progresso automático: ' + error.message);
+      setTimeout(() => setError(''), 5000);
     }
   };
 
@@ -532,14 +579,14 @@ const EtapasObra = ({ obraId, onOrcamentoChange, onProgressoChange }) => {
     
     if (!temEtapasAutomaticas) return null;
 
-  return (
-        <button
+    return (
+      <button
         onClick={atualizarProgressoAutomaticoEtapas}
-        className="ml-4 bg-gray-100 text-gray-700 px-3 py-1 rounded-md hover:bg-gray-200 flex items-center text-sm"
+        className="ml-4 bg-blue-100 text-blue-700 px-3 py-1 rounded-md hover:bg-blue-200 flex items-center text-sm font-medium"
         title="Atualizar progresso de todas as etapas configuradas para cálculo automático"
-        >
+      >
         <FaCalculator className="mr-1" /> Atualizar Progresso Automático
-        </button>
+      </button>
     );
   };
 
@@ -567,6 +614,63 @@ const EtapasObra = ({ obraId, onOrcamentoChange, onProgressoChange }) => {
     );
   };
 
+  // Função para regenerar etapas padrão
+  const regenerarEtapasPadrao = async () => {
+    try {
+      setRegeneratingEtapas(true);
+      setError(null);
+      setSuccessMessage('');
+      
+      console.log('Iniciando geração de etapas padrão para obra ID:', obraId);
+      const { data, error, errors, parcial } = await criarEtapasPadrao(obraId);
+      
+      if (error) {
+        console.error('Erro ao criar etapas padrão:', error);
+        
+        // Mostrar detalhes específicos do erro
+        if (error.message) {
+          setError(`Erro ao criar etapas padrão: ${error.message}`);
+        } else if (error.code) {
+          setError(`Erro ao criar etapas padrão (${error.code}): ${error.message || 'Erro desconhecido'}`);
+        } else {
+          setError('Erro ao criar etapas padrão: ' + JSON.stringify(error));
+        }
+        
+        throw error;
+      }
+      
+      if (errors && errors.length > 0) {
+        console.error('Erros ao inserir algumas etapas:', errors);
+        if (parcial) {
+          setSuccessMessage(`Algumas etapas foram criadas com sucesso (${data.length}), mas ocorreram ${errors.length} erros.`);
+        } else {
+          setError(`Falha ao criar etapas padrão. ${errors.length} erros encontrados.`);
+        }
+      } else if (data && data.length > 0) {
+        console.log('Etapas padrão criadas com sucesso:', data.length);
+        setSuccessMessage(`${data.length} etapas padrão criadas com sucesso!`);
+      } else {
+        console.warn('Nenhuma etapa foi criada');
+        setError('Nenhuma etapa foi criada. Verifique o console para mais detalhes.');
+      }
+      
+      await fetchEtapas();
+      setTimeout(() => setSuccessMessage(''), 8000); // Remove a mensagem após 8 segundos
+      
+    } catch (error) {
+      console.error('Erro ao regenerar etapas padrão:', error);
+      
+      let errorMessage = 'Erro ao criar etapas padrão';
+      if (error.message) {
+        errorMessage += ': ' + error.message;
+      }
+      
+      setError(errorMessage);
+    } finally {
+      setRegeneratingEtapas(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center p-8">
@@ -586,6 +690,15 @@ const EtapasObra = ({ obraId, onOrcamentoChange, onProgressoChange }) => {
         </div>
       )}
 
+      {successMessage && (
+        <div className="bg-green-100 border-l-4 border-green-500 text-green-700 p-4 mb-4">
+          <div className="flex">
+            <FaCheckSquare className="h-5 w-5 text-green-500 mr-2" />
+            <span>{successMessage}</span>
+          </div>
+        </div>
+      )}
+
       <div className="flex justify-between items-center mb-6">
                       <div className="flex items-center">
           <h2 className="text-lg font-semibold">Etapas da Obra</h2>
@@ -601,8 +714,34 @@ const EtapasObra = ({ obraId, onOrcamentoChange, onProgressoChange }) => {
 
       {etapas.length === 0 ? (
         <div className="text-center py-8 bg-gray-50 rounded-lg">
-          <p className="text-gray-500">Nenhuma etapa cadastrada</p>
-                      </div>
+          <p className="mb-3 text-gray-600">Nenhuma etapa cadastrada</p>
+          
+          <div className="flex flex-col gap-3 justify-center items-center">
+            <button
+              className="bg-blue-600 text-white px-4 py-2 rounded-md flex items-center"
+              onClick={() => setShowModal(true)}
+            >
+              <FaPlus className="mr-2" /> Adicionar Nova Etapa
+            </button>
+            
+            <button
+              onClick={regenerarEtapasPadrao}
+              disabled={regeneratingEtapas}
+              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded flex items-center"
+            >
+              {regeneratingEtapas ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Gerando Etapas Padrão...
+                </>
+              ) : (
+                <>
+                  <FaList className="mr-2" /> Gerar Etapas Padrão
+                </>
+              )}
+            </button>
+          </div>
+        </div>
       ) : (
         <div className="space-y-4">
           {renderLegendaProgresso()}
@@ -643,8 +782,8 @@ const EtapasObra = ({ obraId, onOrcamentoChange, onProgressoChange }) => {
                         {etapa.data_inicio ? (
                           <>
                             {new Date(etapa.data_inicio).toLocaleDateString('pt-BR')}
-                            {etapa.data_fim && (
-                              <> até {new Date(etapa.data_fim).toLocaleDateString('pt-BR')}</>
+                            {etapa.data_previsao_termino && (
+                              <> até {new Date(etapa.data_previsao_termino).toLocaleDateString('pt-BR')}</>
                             )}
                           </>
                         ) : (
@@ -822,8 +961,8 @@ const EtapasObra = ({ obraId, onOrcamentoChange, onProgressoChange }) => {
                   </label>
                   <input
                     type="date"
-                    name="data_fim"
-                    value={formData.data_fim}
+                    name="data_previsao_termino"
+                    value={formData.data_previsao_termino}
                     onChange={handleChange}
                       className="w-full border border-gray-300 rounded-md px-3 py-2"
                   />
@@ -845,19 +984,6 @@ const EtapasObra = ({ obraId, onOrcamentoChange, onProgressoChange }) => {
                 </select>
               </div>
               
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Estimativa de Horas
-                    </label>
-                    <input
-                      type="number"
-                      name="estimativa_horas"
-                      value={formData.estimativa_horas}
-                      onChange={handleChange}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2"
-                      min="0"
-                    />
-                  </div>
 
                   {/* Progresso */}
               <div className="mb-4">
@@ -991,10 +1117,18 @@ const EtapasObra = ({ obraId, onOrcamentoChange, onProgressoChange }) => {
 
                         // Se o progresso é automático, atualizar o progresso
                         if (etapaAtualizada.progresso_automatico) {
-                          const novoProgresso = calcularProgressoFinanceiro(
+                          let novoProgresso = calcularProgressoFinanceiro(
                             etapaAtualizada.valor_realizado || 0,
                             etapaAtualizada.valor_previsto || 0
                           );
+                          
+                          // Garantir que o valor seja um inteiro para o banco de dados
+                          // Para valores muito pequenos, garantir pelo menos 1% se houver algum valor realizado
+                          if (etapaAtualizada.valor_realizado > 0 && novoProgresso < 1) {
+                            novoProgresso = 1; // Mínimo de 1% se houver valor realizado
+                          } else {
+                            novoProgresso = Math.round(novoProgresso); // Arredondar para inteiro
+                          }
 
                           // Atualizar o progresso no banco de dados
                           const { error: updateError } = await supabase

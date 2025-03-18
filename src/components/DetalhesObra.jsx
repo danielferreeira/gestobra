@@ -80,10 +80,10 @@ const DetalhesObra = ({ obra }) => {
 
   // Função para calcular dias restantes
   const calcularDiasRestantes = () => {
-    if (!obra.data_fim) return null;
+    if (!obra.data_previsao_termino) return null;
     const hoje = new Date();
-    const dataFim = new Date(obra.data_fim);
-    const diffTime = dataFim - hoje;
+    const dataTermino = new Date(obra.data_previsao_termino);
+    const diffTime = dataTermino - hoje;
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     return diffDays;
   };
@@ -139,6 +139,11 @@ const DetalhesObra = ({ obra }) => {
         <div className="text-right text-sm text-gray-600">
           {obra.progresso || 0}% concluído
         </div>
+      </div>
+
+      {/* Título da seção de etapas */}
+      <div className="mb-4">
+        <h3 className="text-lg font-medium">Etapas da Obra</h3>
       </div>
 
       {/* Informações Financeiras */}
@@ -204,7 +209,7 @@ const DetalhesObra = ({ obra }) => {
           <div className="mt-2">
             <span className="text-sm text-gray-500">Prazo</span>
             <div className="flex items-center justify-between">
-              <p className="text-gray-900">{formatDate(obra.data_inicio)} - {formatDate(obra.data_fim)}</p>
+              <p className="text-gray-900">{formatDate(obra.data_inicio)} - {formatDate(obra.data_previsao_termino)}</p>
               {diasRestantes !== null && (
                 <span className={`text-xs px-2 py-1 rounded-full ${diasRestantes < 0 ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
                   {diasRestantes < 0 
@@ -230,7 +235,7 @@ const DetalhesObra = ({ obra }) => {
               </div>
               <div>
                 <span className="text-xs text-gray-500">Término</span>
-                <p className="text-gray-900">{formatDate(obra.data_fim)}</p>
+                <p className="text-gray-900">{formatDate(obra.data_previsao_termino)}</p>
               </div>
             </div>
           </div>

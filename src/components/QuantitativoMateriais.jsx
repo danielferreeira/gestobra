@@ -5,13 +5,15 @@ import { supabase } from '../services/supabaseClient';
 
 const QuantitativoMateriais = ({ obraId }) => {
   const [materiais, setMateriais] = useState([]);
+  const [filteredMateriais, setFilteredMateriais] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [showTable, setShowTable] = useState(false);
+  const [filtro, setFiltro] = useState({ termo: '', categoria: '', valorMin: '', valorMax: '' });
+  const [ordenacao, setOrdenacao] = useState({ campo: 'nome', crescente: true });
   const [searchTerm, setSearchTerm] = useState('');
   const [filtroCategoria, setFiltroCategoria] = useState('');
-  const [ordenacao, setOrdenacao] = useState('nome');
   const [direcaoOrdenacao, setDirecaoOrdenacao] = useState('asc');
-  const [isCreatingTable, setIsCreatingTable] = useState(false);
 
   // Carregar quantitativo de materiais
   const fetchMateriais = async () => {
@@ -27,6 +29,7 @@ const QuantitativoMateriais = ({ obraId }) => {
       }
       
       setMateriais(data || []);
+      setFilteredMateriais(data || []);
       setLoading(false);
     } catch (error) {
       console.error('Erro ao carregar quantitativo de materiais:', error);
@@ -36,45 +39,10 @@ const QuantitativoMateriais = ({ obraId }) => {
   };
 
   useEffect(() => {
-    fetchMateriais();
-  }, [obraId]);
-
-  // Criar tabela etapas_materiais se não existir
-  const criarTabelaEtapasMateriais = async () => {
-    try {
-      setIsCreatingTable(true);
-      
-      // Verificar se a tabela já existe
-      const { error: checkError } = await supabase.rpc('check_table_exists', { 
-        table_name: 'etapas_materiais' 
-      });
-      
-      if (checkError) {
-        // Se não conseguir verificar, tentar criar diretamente
-        const { error: createError } = await supabase.rpc('create_etapas_materiais_table');
-        
-        if (createError) {
-          throw createError;
-        }
-      } else {
-        // Tabela já existe, tentar adicionar as relações
-        const { error: relError } = await supabase.rpc('add_etapas_materiais_relations');
-        
-        if (relError) {
-          throw relError;
-        }
-      }
-      
-      // Recarregar os dados
-      await fetchMateriais();
-      
-      setIsCreatingTable(false);
-    } catch (error) {
-      console.error('Erro ao criar tabela:', error);
-      setError(`Erro ao criar tabela: ${error.message}`);
-      setIsCreatingTable(false);
+    if (obraId) {
+      fetchMateriais();
     }
-  };
+  }, [obraId]);
 
   // Formatar valores monetários
   const formatCurrency = (value) => {
@@ -102,7 +70,7 @@ const QuantitativoMateriais = ({ obraId }) => {
   const materiaisOrdenados = [...materiaisFiltrados].sort((a, b) => {
     let valorA, valorB;
     
-    switch (ordenacao) {
+    switch (ordenacao.campo) {
       case 'nome':
         valorA = a.nome.toLowerCase();
         valorB = b.nome.toLowerCase();
@@ -161,10 +129,10 @@ const QuantitativoMateriais = ({ obraId }) => {
 
   // Alternar direção de ordenação
   const toggleOrdenacao = (campo) => {
-    if (ordenacao === campo) {
+    if (ordenacao.campo === campo) {
       setDirecaoOrdenacao(direcaoOrdenacao === 'asc' ? 'desc' : 'asc');
     } else {
-      setOrdenacao(campo);
+      setOrdenacao({ campo, crescente: true });
       setDirecaoOrdenacao('asc');
     }
   };
@@ -318,7 +286,7 @@ const QuantitativoMateriais = ({ obraId }) => {
                 >
                   <div className="flex items-center">
                     Nome
-                    {ordenacao === 'nome' && (
+                    {ordenacao.campo === 'nome' && (
                       <span className="ml-1">{direcaoOrdenacao === 'asc' ? '↑' : '↓'}</span>
                     )}
                   </div>
@@ -329,7 +297,7 @@ const QuantitativoMateriais = ({ obraId }) => {
                 >
                   <div className="flex items-center">
                     Categoria
-                    {ordenacao === 'categoria' && (
+                    {ordenacao.campo === 'categoria' && (
                       <span className="ml-1">{direcaoOrdenacao === 'asc' ? '↑' : '↓'}</span>
                     )}
                   </div>
@@ -343,7 +311,7 @@ const QuantitativoMateriais = ({ obraId }) => {
                 >
                   <div className="flex items-center">
                     Quantidade
-                    {ordenacao === 'quantidade' && (
+                    {ordenacao.campo === 'quantidade' && (
                       <span className="ml-1">{direcaoOrdenacao === 'asc' ? '↑' : '↓'}</span>
                     )}
                   </div>
@@ -357,7 +325,7 @@ const QuantitativoMateriais = ({ obraId }) => {
                 >
                   <div className="flex items-center">
                     Valor Total
-                    {ordenacao === 'valor' && (
+                    {ordenacao.campo === 'valor' && (
                       <span className="ml-1">{direcaoOrdenacao === 'asc' ? '↑' : '↓'}</span>
                     )}
                   </div>

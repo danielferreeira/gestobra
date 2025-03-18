@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FaPlus, FaEdit, FaTrash, FaBoxes, FaSearch } from 'react-icons/fa';
+import { FaPlus, FaEdit, FaTrash, FaBoxes, FaSearch, FaBuilding } from 'react-icons/fa';
 import { supabase } from '../services/supabaseClient';
 import { getMateriais } from '../services/materiaisService';
 
@@ -11,6 +11,8 @@ const EtapaMateriais = ({ etapaId, obraId, onUpdate }) => {
   const [showModal, setShowModal] = useState(false);
   const [currentMaterial, setCurrentMaterial] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [fornecedores, setFornecedores] = useState([]);
+  const [selectedFornecedor, setSelectedFornecedor] = useState('');
   const [formData, setFormData] = useState({
     material_id: '',
     quantidade: 1,
@@ -20,23 +22,13 @@ const EtapaMateriais = ({ etapaId, obraId, onUpdate }) => {
     observacoes: ''
   });
 
-  // Carregar materiais e materiais da etapa
+  // Carregar materiais, fornecedores e materiais da etapa
   useEffect(() => {
     const fetchData = async () => {
       if (!etapaId) return;
       
       try {
         setLoading(true);
-        
-        // Verificar se a tabela etapas_materiais existe
-        const { error: tableError } = await supabase.rpc('check_table_exists', { 
-          table_name: 'etapas_materiais' 
-        });
-        
-        if (tableError) {
-          // Se a tabela não existir, criar
-          await supabase.rpc('create_etapas_materiais_table');
-        }
         
         // Buscar todos os materiais disponíveis
         const { data: materiaisData, error: materiaisError } = await getMateriais();
@@ -46,6 +38,18 @@ const EtapaMateriais = ({ etapaId, obraId, onUpdate }) => {
         }
         
         setMateriais(materiaisData || []);
+        
+        // Buscar fornecedores
+        const { data: fornecedoresData, error: fornecedoresError } = await supabase
+          .from('fornecedores')
+          .select('*')
+          .order('nome');
+        
+        if (fornecedoresError) {
+          throw fornecedoresError;
+        }
+        
+        setFornecedores(fornecedoresData || []);
         
         // Buscar materiais da etapa
         const { data: etapaMateriaisData, error: etapaMateriaisError } = await supabase
@@ -63,7 +67,8 @@ const EtapaMateriais = ({ etapaId, obraId, onUpdate }) => {
               nome,
               categoria,
               unidade,
-              preco_unitario
+              preco_unitario,
+              fornecedor_id
             )
           `)
           .eq('etapa_id', etapaId);
@@ -103,6 +108,10 @@ const EtapaMateriais = ({ etapaId, obraId, onUpdate }) => {
   const openModal = (material = null) => {
     if (material) {
       setCurrentMaterial(material);
+      // Se for edição, identificar o fornecedor do material
+      const materialCompleto = materiais.find(m => m.id === material.material_id);
+      setSelectedFornecedor(materialCompleto?.fornecedor_id || '');
+      
       setFormData({
         material_id: material.material_id,
         quantidade: material.quantidade,
@@ -113,6 +122,7 @@ const EtapaMateriais = ({ etapaId, obraId, onUpdate }) => {
       });
     } else {
       setCurrentMaterial(null);
+      setSelectedFornecedor('');
       setFormData({
         material_id: '',
         quantidade: 1,
@@ -130,6 +140,17 @@ const EtapaMateriais = ({ etapaId, obraId, onUpdate }) => {
   const closeModal = () => {
     setShowModal(false);
     setCurrentMaterial(null);
+    setSelectedFornecedor('');
+  };
+
+  // Manipular mudança de fornecedor
+  const handleFornecedorChange = (e) => {
+    setSelectedFornecedor(e.target.value);
+    // Limpar a seleção de material quando o fornecedor muda
+    setFormData(prev => ({
+      ...prev,
+      material_id: ''
+    }));
   };
 
   // Manipular mudanças no formulário
@@ -315,10 +336,11 @@ const EtapaMateriais = ({ etapaId, obraId, onUpdate }) => {
     }
   };
 
-  // Filtrar materiais para o select
+  // Filtrar materiais para o select com base no fornecedor selecionado e termo de busca
   const materiaisFiltrados = materiais.filter(material => 
-    (material.nome?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-    (material.categoria?.toLowerCase() || '').includes(searchTerm.toLowerCase())
+    (selectedFornecedor === '' || material.fornecedor_id === selectedFornecedor) &&
+    ((material.nome?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+    (material.categoria?.toLowerCase() || '').includes(searchTerm.toLowerCase()))
   );
 
   // Calcular valor total dos materiais
@@ -446,6 +468,26 @@ const EtapaMateriais = ({ etapaId, obraId, onUpdate }) => {
             </h2>
             
             <form onSubmit={handleSubmit}>
+              {/* Seleção de Fornecedor */}
+              <div className="mb-4">
+                <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="fornecedor">
+                  Fornecedor
+                </label>
+                <select
+                  id="fornecedor"
+                  value={selectedFornecedor}
+                  onChange={handleFornecedorChange}
+                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                >
+                  <option value="">Selecione um fornecedor</option>
+                  {fornecedores.map(fornecedor => (
+                    <option key={fornecedor.id} value={fornecedor.id}>
+                      {fornecedor.nome}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              
               <div className="mb-4">
                 <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="material_id">
                   Material
@@ -469,14 +511,22 @@ const EtapaMateriais = ({ etapaId, obraId, onUpdate }) => {
                   onChange={handleChange}
                   className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
                   required
+                  disabled={!selectedFornecedor}
                 >
-                  <option value="">Selecione um material</option>
+                  <option value="">
+                    {selectedFornecedor ? "Selecione um material" : "Primeiro selecione um fornecedor"}
+                  </option>
                   {materiaisFiltrados.map(material => (
                     <option key={material.id} value={material.id}>
                       {material.nome} - {material.categoria} ({formatCurrency(material.preco_unitario)}/{material.unidade})
                     </option>
                   ))}
                 </select>
+                {!selectedFornecedor && (
+                  <p className="text-xs text-blue-500 mt-1">
+                    Selecione um fornecedor para ver os materiais disponíveis
+                  </p>
+                )}
               </div>
               
               <div className="mb-4">

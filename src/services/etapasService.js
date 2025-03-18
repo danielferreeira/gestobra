@@ -148,38 +148,81 @@ export const reordenarEtapas = async (obraId, novaOrdem) => {
  */
 export const getDependenciasByEtapaId = async (etapaId) => {
   try {
-    return await supabase
+    console.log(`Buscando dependências para etapa ${etapaId}`);
+    
+    // Primeiro, buscar apenas as referências das dependências
+    const { data: dependenciasRef, error: refError } = await supabase
       .from('etapas_dependencias')
-      .select(`
-        etapa_requisito_id,
-        etapas_obra!etapa_requisito_id (
-          id,
-          nome,
-          status,
-          progresso
-        )
-      `)
-      .eq('etapa_id', etapaId);
+      .select('etapa_requisito_id')
+      .eq('etapa_dependente_id', etapaId);
+    
+    if (refError) {
+      console.error('Erro ao buscar referências de dependências:', refError);
+      return { data: [], error: refError };
+    }
+    
+    if (!dependenciasRef || dependenciasRef.length === 0) {
+      return { data: [], error: null };
+    }
+    
+    // Extrair os IDs das etapas requisito
+    const etapaRequisitosIds = dependenciasRef.map(dep => dep.etapa_requisito_id);
+    
+    // Buscar detalhes das etapas requisito
+    const { data: etapasRequisito, error: etapasError } = await supabase
+      .from('etapas_obra')
+      .select('id, nome, status, progresso')
+      .in('id', etapaRequisitosIds);
+    
+    if (etapasError) {
+      console.error('Erro ao buscar detalhes das etapas requisito:', etapasError);
+      return { data: [], error: etapasError };
+    }
+    
+    // Montar as dependências com detalhes das etapas
+    const dependenciasCompletas = dependenciasRef.map(dep => {
+      const etapaRequisito = etapasRequisito.find(etapa => etapa.id === dep.etapa_requisito_id);
+      return {
+        etapa_requisito_id: dep.etapa_requisito_id,
+        etapa_dependente_id: etapaId,
+        etapas_obra: etapaRequisito
+      };
+    });
+    
+    return { data: dependenciasCompletas, error: null };
   } catch (error) {
     console.error('Erro ao buscar dependências:', error);
-    return { data: null, error };
+    return { data: [], error };
   }
 };
 
 /**
  * Adiciona uma dependência entre etapas
- * @param {string} etapaDependenteId ID da etapa dependente
+ * @param {string} etapaId ID da etapa dependente
  * @param {string} etapaRequisitoId ID da etapa requisito
  * @returns {Promise} Promise com o resultado da operação
  */
 export const addDependencia = async (etapaId, etapaRequisitoId) => {
   try {
-    return await supabase
+    console.log(`Adicionando dependência: Etapa ${etapaId} depende de ${etapaRequisitoId}`);
+    
+    const dependencia = {
+      etapa_dependente_id: etapaId,
+      etapa_requisito_id: etapaRequisitoId
+    };
+    
+    const { data, error } = await supabase
       .from('etapas_dependencias')
-      .insert([{
-        etapa_id: etapaId,
-        etapa_requisito_id: etapaRequisitoId
-      }]);
+      .insert([dependencia])
+      .select();
+    
+    if (error) {
+      console.error('Erro ao adicionar dependência:', error);
+      throw error;
+    }
+    
+    console.log('Dependência adicionada com sucesso:', data);
+    return { data, error: null };
   } catch (error) {
     console.error('Erro ao adicionar dependência:', error);
     return { error };
@@ -188,17 +231,28 @@ export const addDependencia = async (etapaId, etapaRequisitoId) => {
 
 /**
  * Remove uma dependência entre etapas
- * @param {string} etapaDependenteId ID da etapa dependente
+ * @param {string} etapaId ID da etapa dependente
  * @param {string} etapaRequisitoId ID da etapa requisito
  * @returns {Promise} Promise com o resultado da operação
  */
 export const removeDependencia = async (etapaId, etapaRequisitoId) => {
   try {
-    return await supabase
+    console.log(`Removendo dependência: Etapa ${etapaId} depende de ${etapaRequisitoId}`);
+    
+    const { data, error } = await supabase
       .from('etapas_dependencias')
       .delete()
-      .eq('etapa_id', etapaId)
-      .eq('etapa_requisito_id', etapaRequisitoId);
+      .eq('etapa_dependente_id', etapaId)
+      .eq('etapa_requisito_id', etapaRequisitoId)
+      .select();
+    
+    if (error) {
+      console.error('Erro ao remover dependência:', error);
+      throw error;
+    }
+    
+    console.log('Dependência removida com sucesso:', data);
+    return { data, error: null };
   } catch (error) {
     console.error('Erro ao remover dependência:', error);
     return { error };
@@ -284,11 +338,11 @@ export const deleteSubtarefa = async (id) => {
  * @returns {boolean} True se a etapa estiver atrasada
  */
 export const isEtapaAtrasada = (etapa) => {
-  if (!etapa.data_fim || etapa.status === 'concluida') return false;
+  if (!etapa.data_previsao_termino || etapa.status === 'concluida') return false;
   
   const hoje = new Date();
-  const dataFim = new Date(etapa.data_fim);
-  return hoje > dataFim && etapa.progresso < 100;
+  const dataTermino = new Date(etapa.data_previsao_termino);
+  return hoje > dataTermino && etapa.progresso < 100;
 };
 
 /**
@@ -336,25 +390,8 @@ export const calcularProgressoGeral = (etapas) => {
     
     return Math.round(progressoPonderado);
   } else {
-    // Se não houver valores previstos, verificar se há estimativas de horas
-    const temEstimativaHoras = etapas.some(etapa => etapa.estimativa_horas > 0);
-    
-    if (temEstimativaHoras) {
-      // Calcular progresso ponderado pela estimativa de horas
-      const horasTotal = etapas.reduce((sum, etapa) => sum + (parseFloat(etapa.estimativa_horas) || 0), 0);
-      
-      if (horasTotal <= 0) return calcularProgressoSimples(etapas);
-      
-      const progressoPonderado = etapas.reduce((sum, etapa) => {
-        const peso = (parseFloat(etapa.estimativa_horas) || 0) / horasTotal;
-        return sum + ((etapa.progresso || 0) * peso);
-      }, 0);
-      
-      return Math.round(progressoPonderado);
-    } else {
-      // Se não houver nem valores nem horas, calcular média simples
-      return calcularProgressoSimples(etapas);
-    }
+    // Se não houver valores previstos, calcular média simples
+    return calcularProgressoSimples(etapas);
   }
 };
 
@@ -366,9 +403,12 @@ const calcularProgressoSimples = (etapas) => {
 
 export const atualizarValorRealizado = async (id, valor_realizado) => {
   try {
+    // Garantir que valores vazios ou inválidos sejam tratados como null
+    const valorFormatado = valor_realizado === '' || isNaN(valor_realizado) ? null : parseFloat(valor_realizado);
+    
     const { data, error } = await supabase
       .from('etapas_obra')
-      .update({ valor_realizado })
+      .update({ valor_realizado: valorFormatado })
       .eq('id', id)
       .select()
       .single();
@@ -377,6 +417,129 @@ export const atualizarValorRealizado = async (id, valor_realizado) => {
     return { data };
   } catch (error) {
     console.error('Erro ao atualizar valor realizado:', error);
+    return { error };
+  }
+};
+
+// Etapas padrão para obras
+export const etapasPadroes = [
+  { nome: 'Preparação do Terreno', descricao: 'Limpeza do terreno, demarcação e preparação do solo.' },
+  { nome: 'Fundação', descricao: 'Execução das fundações e alicerces da construção.' },
+  { nome: 'Estrutura', descricao: 'Montagem da estrutura principal da edificação.' },
+  { nome: 'Alvenaria', descricao: 'Construção de paredes e divisórias.' },
+  { nome: 'Cobertura', descricao: 'Instalação do telhado e sistema de impermeabilização.' },
+  { nome: 'Instalações', descricao: 'Execução de instalações elétricas, hidráulicas e outras.' },
+  { nome: 'Acabamento', descricao: 'Revestimentos, pintura e acabamentos finais.' },
+  { nome: 'Paisagismo e Finalização', descricao: 'Trabalhos externos e finalização da obra.' }
+];
+
+// Função para criar etapas padrão para uma obra
+export const criarEtapasPadrao = async (obraId) => {
+  try {
+    console.log('Iniciando criação de etapas padrão para obra ID:', obraId);
+    
+    if (!obraId) {
+      const errorMsg = 'ID da obra não fornecido';
+      console.error(errorMsg);
+      throw new Error(errorMsg);
+    }
+    
+    // Verificar conexão com o Supabase
+    try {
+      const { data: healthCheck, error: healthError } = await supabase
+        .from('obras')
+        .select('count(*)', { count: 'exact', head: true });
+      
+      if (healthError) {
+        console.error('Erro na verificação de conexão com o Supabase:', healthError);
+      } else {
+        console.log('Conexão com o Supabase verificada com sucesso');
+      }
+    } catch (connectionError) {
+      console.error('Falha ao testar conexão com Supabase:', connectionError);
+    }
+    
+    // Verificar se a obra existe
+    try {
+      const { data: obra, error: obraError } = await supabase
+        .from('obras')
+        .select('id')
+        .eq('id', obraId)
+        .single();
+      
+      if (obraError) {
+        console.error('Erro ao verificar obra:', obraError);
+        throw new Error('Obra não encontrada: ' + obraError.message);
+      }
+      
+      console.log('Obra verificada com sucesso:', obra.id);
+    } catch (obraCheckError) {
+      console.error('Falha ao verificar obra:', obraCheckError);
+    }
+    
+    // Preparar etapas para inserção
+    const etapasParaInserir = etapasPadroes.map((etapa, index) => {
+      const dataAtual = new Date().toISOString();
+      
+      const novaEtapa = {
+        obra_id: obraId,
+        nome: etapa.nome,
+        descricao: etapa.descricao,
+        status: 'pendente',
+        progresso: 0,
+        ordem: index + 1,
+        data_inicio: dataAtual,
+        data_previsao_termino: null,
+        valor_previsto: 0,
+        valor_realizado: 0,
+        progresso_automatico: true
+      };
+      console.log(`Preparando etapa ${index + 1}:`, novaEtapa.nome);
+      return novaEtapa;
+    });
+
+    console.log('Total de etapas a inserir:', etapasParaInserir.length);
+    
+    // Inserir etapas uma por uma para identificar problemas específicos
+    const resultados = [];
+    const erros = [];
+    
+    for (let i = 0; i < etapasParaInserir.length; i++) {
+      const etapa = etapasParaInserir[i];
+      console.log(`Inserindo etapa ${i + 1}/${etapasParaInserir.length}: ${etapa.nome}`);
+      
+      try {
+        const { data, error } = await supabase
+          .from('etapas_obra')
+          .insert([etapa])
+          .select();
+        
+        if (error) {
+          console.error(`Erro ao inserir etapa ${i + 1} (${etapa.nome}):`, error);
+          erros.push({ etapa: etapa.nome, erro: error });
+        } else if (data && data.length > 0) {
+          console.log(`Etapa ${i + 1} (${etapa.nome}) inserida com sucesso`);
+          resultados.push(data[0]);
+        }
+      } catch (insertError) {
+        console.error(`Exceção ao inserir etapa ${i + 1} (${etapa.nome}):`, insertError);
+        erros.push({ etapa: etapa.nome, erro: insertError });
+      }
+    }
+    
+    console.log(`Inserção concluída: ${resultados.length} etapas inseridas, ${erros.length} erros`);
+    
+    if (erros.length > 0 && resultados.length === 0) {
+      return { success: false, errors: erros };
+    }
+    
+    return { 
+      success: true, 
+      data: resultados,
+      parcial: erros.length > 0
+    };
+  } catch (error) {
+    console.error('Erro ao criar etapas padrão:', error);
     return { error };
   }
 }; 

@@ -180,7 +180,7 @@ export const getHistoricoMaterial = async (materialId) => {
       obras (id, nome)
     `)
     .eq('material_id', materialId)
-    .order('data', { ascending: false });
+    .order('created_at', { ascending: false });
   
   return { data, error };
 };
@@ -188,17 +188,31 @@ export const getHistoricoMaterial = async (materialId) => {
 // Buscar materiais por obra
 export const getMaterialsByObraId = async (obraId) => {
   try {
-    // Verificar se a tabela etapas_materiais existe
-    const { data: tableInfo, error: tableError } = await supabase
+    // Tentar buscar os materiais da etapa diretamente
+    const { data, error } = await supabase
       .from('etapas_materiais')
-      .select('id')
-      .limit(1);
+      .select(`
+        id,
+        material_id,
+        etapa_id,
+        obra_id,
+        quantidade,
+        valor_total,
+        materiais:material_id (
+          id, 
+          nome, 
+          categoria, 
+          unidade, 
+          preco_unitario
+        )
+      `)
+      .eq('obra_id', obraId);
     
-    // Se a tabela não existir, vamos usar uma abordagem alternativa
-    if (tableError && tableError.code === 'PGRST200') {
-      console.log('Tabela etapas_materiais não encontrada, usando abordagem alternativa');
+    // Se ocorrer um erro de relação inválida ou tabela não existente
+    if (error) {
+      console.log('Erro ao buscar materiais por obra:', error);
       
-      // Verificar se existe a tabela movimentacao_materiais
+      // Tentar uma abordagem alternativa com a tabela de movimentação
       const { data: movData, error: movError } = await supabase
         .from('movimentacao_materiais')
         .select(`
@@ -224,44 +238,6 @@ export const getMaterialsByObraId = async (obraId) => {
       }
       
       return { data: movData || [], error: null };
-    }
-    
-    // Se a tabela existir, mas a relação estiver incorreta, vamos fazer uma consulta mais simples
-    const { data, error } = await supabase
-      .from('etapas_materiais')
-      .select('*')
-      .eq('obra_id', obraId);
-    
-    if (error) {
-      throw error;
-    }
-    
-    // Se não houver erro, mas a consulta não retornar os dados relacionados,
-    // vamos buscar os materiais separadamente
-    if (data && data.length > 0) {
-      // Extrair IDs de materiais
-      const materialIds = [...new Set(data.map(item => item.material_id))];
-      
-      // Buscar detalhes dos materiais
-      const { data: materiaisData, error: materiaisError } = await supabase
-        .from('materiais')
-        .select('*')
-        .in('id', materialIds);
-      
-      if (materiaisError) {
-        throw materiaisError;
-      }
-      
-      // Combinar os dados
-      const combinedData = data.map(item => {
-        const material = materiaisData.find(m => m.id === item.material_id);
-        return {
-          ...item,
-          materiais: material
-        };
-      });
-      
-      return { data: combinedData, error: null };
     }
     
     return { data: data || [], error: null };

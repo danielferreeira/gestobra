@@ -28,22 +28,31 @@ const CronogramaObra = ({ obraId }) => {
       
       try {
         setLoading(true);
+        console.log('Buscando etapas para a obra ID:', obraId);
         const { data, error } = await getEtapasByObraId(obraId);
         
         if (error) {
           throw error;
         }
         
-          setEtapas(data || []);
+        setEtapas(data || []);
         
         // Carregar todas as dependências
+        console.log('Carregando dependências para todas as etapas...');
         const todasDependencias = [];
         for (const etapa of data || []) {
-          const { data: depData } = await getDependenciasByEtapaId(etapa.id);
-          if (depData && depData.length > 0) {
+          console.log(`Buscando dependências para etapa ${etapa.id}`);
+          const { data: depData, error: depError } = await getDependenciasByEtapaId(etapa.id);
+          
+          if (depError) {
+            console.error(`Erro ao buscar dependências para etapa ${etapa.id}:`, depError);
+          } else if (depData && depData.length > 0) {
+            console.log(`Encontradas ${depData.length} dependências para etapa ${etapa.id}`);
             todasDependencias.push(...depData);
           }
         }
+        
+        console.log('Total de dependências encontradas:', todasDependencias.length);
         setDependencias(todasDependencias);
         
         setLoading(false);
@@ -111,16 +120,16 @@ const CronogramaObra = ({ obraId }) => {
           }
         }
         
-        if (etapa.data_fim) {
+        if (etapa.data_previsao_termino) {
           try {
-            const dataEtapaFim = new Date(etapa.data_fim);
-            if (!isNaN(dataEtapaFim.getTime())) {
-              if (!dataFim || dataEtapaFim > dataFim) {
-                dataFim = dataEtapaFim;
+            const dataEtapaTermino = new Date(etapa.data_previsao_termino);
+            if (!isNaN(dataEtapaTermino.getTime())) {
+              if (!dataFim || dataEtapaTermino > dataFim) {
+                dataFim = dataEtapaTermino;
               }
             }
           } catch (e) {
-            console.error('Erro ao processar data de fim:', etapa.data_fim, e);
+            console.error('Erro ao processar data de término:', etapa.data_previsao_termino, e);
           }
         }
       });
@@ -184,11 +193,11 @@ const CronogramaObra = ({ obraId }) => {
     if (!etapa.data_inicio || !periodos.length) return { left: 0, width: 0 };
     
     const dataInicioEtapa = new Date(etapa.data_inicio);
-    const dataFimEtapa = etapa.data_fim ? new Date(etapa.data_fim) : new Date(dataInicioEtapa);
+    const dataTerminoEtapa = etapa.data_previsao_termino ? new Date(etapa.data_previsao_termino) : new Date(dataInicioEtapa);
     
     // Se não tiver data de fim, usar 14 dias a partir da data de início
-    if (!etapa.data_fim) {
-      dataFimEtapa.setDate(dataFimEtapa.getDate() + 14);
+    if (!etapa.data_previsao_termino) {
+      dataTerminoEtapa.setDate(dataTerminoEtapa.getDate() + 14);
     }
     
     const primeiroPeriodo = periodos[0].data;
@@ -201,7 +210,7 @@ const CronogramaObra = ({ obraId }) => {
     const left = (diferencaInicio / totalDias) * larguraTotal;
     
     // Calcular largura
-    const duracaoEtapa = dataFimEtapa - dataInicioEtapa;
+    const duracaoEtapa = dataTerminoEtapa - dataInicioEtapa;
     const width = (duracaoEtapa / totalDias) * larguraTotal;
     
     return {
@@ -212,12 +221,12 @@ const CronogramaObra = ({ obraId }) => {
 
   // Verificar se uma etapa está atrasada
   const isEtapaAtrasada = (etapa) => {
-    if (!etapa.data_fim) return false;
+    if (!etapa.data_previsao_termino) return false;
     
     const hoje = new Date();
-    const dataFim = new Date(etapa.data_fim);
+    const dataTermino = new Date(etapa.data_previsao_termino);
     
-    return hoje > dataFim && etapa.status !== 'concluida';
+    return hoje > dataTermino && etapa.status !== 'concluida';
   };
 
   // Obter cor da barra com base no status e progresso
@@ -326,30 +335,39 @@ const CronogramaObra = ({ obraId }) => {
 
   const periodos = getPeriodosComOffset();
 
-  // Verificar se há dependências para uma etapa
+  // Verificar se uma etapa tem dependências
   const temDependencias = (etapaId) => {
+    // Uma etapa tem dependências se aparece como requisito ou como dependente
     return dependencias.some(dep => 
       dep.etapa_dependente_id === etapaId || 
       dep.etapa_requisito_id === etapaId
     );
   };
 
-  // Obter etapas dependentes de uma etapa
+  // Obter etapas dependentes de uma etapa (etapas que dependem desta)
   const getEtapasDependentes = (etapaId) => {
+    // Etapas que têm esta etapa como requisito
     const deps = dependencias.filter(dep => dep.etapa_requisito_id === etapaId);
     return deps.map(dep => {
+      // Encontrar a etapa que depende desta
       const etapa = etapas.find(e => e.id === dep.etapa_dependente_id);
       return etapa;
-    }).filter(Boolean);
+    }).filter(Boolean); // Remover undefined/null
   };
 
-  // Obter etapas requisito de uma etapa
+  // Obter etapas requisito de uma etapa (etapas das quais esta depende)
   const getEtapasRequisito = (etapaId) => {
+    // Etapas que são requisito desta etapa
     const deps = dependencias.filter(dep => dep.etapa_dependente_id === etapaId);
     return deps.map(dep => {
-      const etapa = etapas.find(e => e.id === dep.etapa_requisito_id);
-      return etapa;
-    }).filter(Boolean);
+      if (dep.etapas_obra) {
+        // Se temos o objeto etapa já na dependência, usá-lo
+        return dep.etapas_obra;
+      } else {
+        // Caso contrário, buscar nos etapas
+        return etapas.find(e => e.id === dep.etapa_requisito_id);
+      }
+    }).filter(Boolean); // Remover undefined/null
   };
 
   if (loading) {
@@ -543,10 +561,18 @@ const CronogramaObra = ({ obraId }) => {
                     {/* Linhas de dependência */}
                     {showDependencias && (
                       <>
+                        {/* Etapas das quais esta depende (requisitos) */}
                         {dependencias
                           .filter(dep => dep.etapa_dependente_id === etapa.id)
                           .map(dep => {
-                            const etapaRequisito = etapas.find(e => e.id === dep.etapa_requisito_id);
+                            // Encontrar a etapa requisito
+                            let etapaRequisito;
+                            if (dep.etapas_obra) {
+                              etapaRequisito = etapas.find(e => e.id === dep.etapas_obra.id);
+                            } else {
+                              etapaRequisito = etapas.find(e => e.id === dep.etapa_requisito_id);
+                            }
+                            
                             if (!etapaRequisito) return null;
                             
                             const barraRequisito = calcularBarraEtapa(etapaRequisito, periodos);
@@ -564,7 +590,7 @@ const CronogramaObra = ({ obraId }) => {
                             
                             return (
                               <svg
-                                key={`dep-${dep.id}`}
+                                key={`dep-${dep.etapa_requisito_id}`}
                                 className="absolute top-0 left-0 w-full h-full pointer-events-none"
                                 style={{ zIndex: 1 }}
                               >
@@ -572,13 +598,19 @@ const CronogramaObra = ({ obraId }) => {
                                   d={`M ${inicioX} 8 L ${inicioX + 10} 8 L ${fimX - 10} 8 L ${fimX} 8`}
                                   stroke="#9CA3AF"
                                   strokeWidth="1"
-                                  strokeDasharray="4"
                                   fill="none"
+                                  strokeDasharray="3,3"
                                 />
-                                <circle cx={fimX} cy={8} r="3" fill="#9CA3AF" />
+                                <circle
+                                  cx={fimX}
+                                  cy={8}
+                                  r={3}
+                                  fill="#9CA3AF"
+                                />
                               </svg>
                             );
-                          })}
+                          })
+                        }
                       </>
                     )}
                     </div>
@@ -622,11 +654,11 @@ const CronogramaObra = ({ obraId }) => {
                 </div>
                 <div>
                   <p className="text-gray-500">Data de Término:</p>
-                  <p>{formatDate(etapaInfo.data_fim)}</p>
+                  <p>{formatDate(etapaInfo.data_previsao_termino)}</p>
                 </div>
                 <div>
                   <p className="text-gray-500">Progresso:</p>
-                  <div className="w-full bg-gray-200 rounded-full h-2.5 mt-1">
+                  <div className="w-full bg-gray-200 rounded-full h-2.5">
                     <div
                       className="bg-blue-600 h-2.5 rounded-full"
                       style={{ width: `${etapaInfo.progresso || 0}%` }}
@@ -634,11 +666,7 @@ const CronogramaObra = ({ obraId }) => {
                   </div>
                   <p className="text-right text-xs mt-1">{etapaInfo.progresso || 0}%</p>
                 </div>
-                <div>
-                  <p className="text-gray-500">Estimativa de Horas:</p>
-                  <p>{etapaInfo.estimativa_horas || 'Não definida'}</p>
-        </div>
-      </div>
+              </div>
 
               {etapaInfo.descricao && (
                 <div>
@@ -661,8 +689,8 @@ const CronogramaObra = ({ obraId }) => {
                       ) : (
                         <p className="text-gray-400 italic">Nenhuma etapa requisito</p>
                       )}
-        </div>
-      </div>
+                    </div>
+                  </div>
 
                   <div>
                     <p className="text-gray-500 mb-1">Etapas Dependentes:</p>
@@ -680,7 +708,7 @@ const CronogramaObra = ({ obraId }) => {
                   </div>
                 </>
               )}
-        </div>
+            </div>
             
             <div className="mt-6 flex justify-end">
               <button
@@ -689,9 +717,9 @@ const CronogramaObra = ({ obraId }) => {
               >
                 Fechar
               </button>
+            </div>
+          </div>
         </div>
-        </div>
-      </div>
       )}
     </div>
   );

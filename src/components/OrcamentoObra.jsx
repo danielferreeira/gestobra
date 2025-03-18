@@ -585,7 +585,6 @@ const OrcamentoObra = ({ obraId, orcamentoTotal, onTotalGastoChange }) => {
                   className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
                   required
                 >
-                  <option value="material">Material</option>
                   <option value="mao_de_obra">Mão de Obra</option>
                   <option value="equipamento">Equipamento</option>
                   <option value="servico">Serviço</option>

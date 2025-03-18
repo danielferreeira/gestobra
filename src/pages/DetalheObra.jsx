@@ -29,7 +29,7 @@ const DetalheObra = () => {
     endereco: '',
     orcamento: '',
     data_inicio: '',
-    data_fim: '',
+    data_previsao_termino: '',
     status: 'planejada',
     descricao: '',
     area_construida: '',
@@ -91,7 +91,7 @@ const DetalheObra = () => {
           endereco: data.endereco || '',
           orcamento: data.orcamento || '',
           data_inicio: formatDateForInput(data.data_inicio),
-          data_fim: formatDateForInput(data.data_fim),
+          data_previsao_termino: formatDateForInput(data.data_previsao_termino),
           status: data.status || 'planejada',
           descricao: data.descricao || '',
           area_construida: data.area_construida || '',
@@ -192,8 +192,8 @@ const DetalheObra = () => {
         dataToUpdate.data_inicio = new Date(dataToUpdate.data_inicio).toISOString();
       }
       
-      if (dataToUpdate.data_fim) {
-        dataToUpdate.data_fim = new Date(dataToUpdate.data_fim).toISOString();
+      if (dataToUpdate.data_previsao_termino) {
+        dataToUpdate.data_previsao_termino = new Date(dataToUpdate.data_previsao_termino).toISOString();
       }
       
       // Tratar campos numéricos vazios
@@ -618,8 +618,8 @@ const DetalheObra = () => {
                     </label>
                     <input
                       type="date"
-                      name="data_fim"
-                      value={formData.data_fim}
+                      name="data_previsao_termino"
+                      value={formData.data_previsao_termino}
                       onChange={handleChange}
                       className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-500"
                     />

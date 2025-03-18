@@ -35,7 +35,7 @@ const Dashboard = () => {
         const { data: despesasData, error: despesasError } = await supabase
           .from('despesas')
           .select('*')
-          .order('data', { ascending: false });
+          .order('created_at', { ascending: false });
         
         if (despesasError) throw despesasError;
         
@@ -70,10 +70,10 @@ const Dashboard = () => {
         
         // Alertas de obras próximas do prazo
         obrasData.forEach(obra => {
-          if (obra.data_fim && obra.status !== 'concluida') {
-            const dataFim = new Date(obra.data_fim);
+          if (obra.data_previsao_termino && obra.status !== 'concluida') {
+            const dataTermino = new Date(obra.data_previsao_termino);
             const hoje = new Date();
-            const diasRestantes = Math.ceil((dataFim - hoje) / (1000 * 60 * 60 * 24));
+            const diasRestantes = Math.ceil((dataTermino - hoje) / (1000 * 60 * 60 * 24));
             
             if (diasRestantes <= 15 && diasRestantes > 0) {
               alertasTemp.push({

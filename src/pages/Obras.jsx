@@ -16,9 +16,12 @@ const Obras = () => {
     endereco: '',
     orcamento: '',
     data_inicio: '',
-    data_fim: '',
+    data_previsao_termino: '',
     status: 'planejada',
-    descricao: ''
+    descricao: '',
+    area_construida: '',
+    responsavel: '',
+    cliente: ''
   });
   
   // Novos estados para filtros e visualização
@@ -114,27 +117,32 @@ const Obras = () => {
 
   // Abrir modal para adicionar/editar obra
   const openModal = (obra = null) => {
+    setCurrentObra(obra);
     if (obra) {
-      setCurrentObra(obra);
       setFormData({
         nome: obra.nome || '',
         endereco: obra.endereco || '',
         orcamento: obra.orcamento || '',
         data_inicio: obra.data_inicio || '',
-        data_fim: obra.data_fim || '',
+        data_previsao_termino: obra.data_previsao_termino || '',
         status: obra.status || 'planejada',
-        descricao: obra.descricao || ''
+        descricao: obra.descricao || '',
+        area_construida: obra.area_construida || '',
+        responsavel: obra.responsavel || '',
+        cliente: obra.cliente || ''
       });
     } else {
-      setCurrentObra(null);
       setFormData({
         nome: '',
         endereco: '',
         orcamento: '',
-        data_inicio: new Date().toISOString().split('T')[0],
-        data_fim: '',
+        data_inicio: '',
+        data_previsao_termino: '',
         status: 'planejada',
-        descricao: ''
+        descricao: '',
+        area_construida: '',
+        responsavel: '',
+        cliente: ''
       });
     }
     setShowModal(true);
@@ -161,7 +169,8 @@ const Obras = () => {
       
       const obraData = {
         ...formData,
-        orcamento: parseFloat(formData.orcamento) || 0,
+        orcamento: formData.orcamento === '' ? null : parseFloat(formData.orcamento || 0),
+        area_construida: formData.area_construida === '' ? null : parseFloat(formData.area_construida || 0),
         progresso: currentObra?.progresso || 0
       };
       
@@ -496,8 +505,8 @@ const Obras = () => {
                       <FaCalendarAlt className="text-gray-400 mt-1 mr-2" />
                       <div>
                         <p className="text-sm text-gray-600">Início: {formatDate(obra.data_inicio)}</p>
-                        {obra.data_fim && (
-                          <p className="text-sm text-gray-600">Término: {formatDate(obra.data_fim)}</p>
+                        {obra.data_previsao_termino && (
+                          <p className="text-sm text-gray-600">Término: {formatDate(obra.data_previsao_termino)}</p>
                         )}
                       </div>
                     </div>
@@ -613,10 +622,10 @@ const Obras = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-1">Data de Término (Prevista)</label>
                     <input
                       type="date"
-                      name="data_fim"
-                      value={formData.data_fim}
+                      name="data_previsao_termino"
+                      value={formData.data_previsao_termino}
                       onChange={handleChange}
-                      className="w-full p-2 border rounded-md"
+                      className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
                     />
                   </div>
                 </div>

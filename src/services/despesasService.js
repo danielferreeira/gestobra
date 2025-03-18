@@ -8,7 +8,7 @@ export const getDespesas = async () => {
       *,
       obras (id, nome)
     `)
-    .order('data', { ascending: false });
+    .order('created_at', { ascending: false });
   
   return { data, error };
 };
@@ -19,7 +19,7 @@ export const getDespesasByObraId = async (obraId) => {
     .from('despesas')
     .select('*')
     .eq('obra_id', obraId)
-    .order('data', { ascending: false });
+    .order('created_at', { ascending: false });
   
   return { data, error };
 };

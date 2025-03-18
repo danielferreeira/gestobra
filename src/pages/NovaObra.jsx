@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabaseClient';
+import { criarEtapasPadrao } from '../services/etapasService';
 import { FaArrowLeft, FaSave } from 'react-icons/fa';
 
 const NovaObra = () => {
@@ -12,7 +13,7 @@ const NovaObra = () => {
     endereco: '',
     orcamento: '',
     data_inicio: '',
-    data_fim: '',
+    data_previsao_termino: '',
     status: 'planejada',
     descricao: '',
     area_construida: '',
@@ -43,17 +44,21 @@ const NovaObra = () => {
         dataToInsert.data_inicio = new Date(dataToInsert.data_inicio).toISOString();
       }
       
-      if (dataToInsert.data_fim) {
-        dataToInsert.data_fim = new Date(dataToInsert.data_fim).toISOString();
+      if (dataToInsert.data_previsao_termino) {
+        dataToInsert.data_previsao_termino = new Date(dataToInsert.data_previsao_termino).toISOString();
       }
       
       // Tratar campos numéricos vazios
       if (dataToInsert.orcamento === '') {
         dataToInsert.orcamento = null;
+      } else if (dataToInsert.orcamento !== null && dataToInsert.orcamento !== undefined) {
+        dataToInsert.orcamento = parseFloat(dataToInsert.orcamento);
       }
       
       if (dataToInsert.area_construida === '') {
         dataToInsert.area_construida = null;
+      } else if (dataToInsert.area_construida !== null && dataToInsert.area_construida !== undefined) {
+        dataToInsert.area_construida = parseFloat(dataToInsert.area_construida);
       }
 
       const { data, error } = await supabase
@@ -63,6 +68,22 @@ const NovaObra = () => {
         .single();
 
       if (error) throw error;
+
+      console.log('Obra criada com ID:', data.id);
+      console.log('Criando etapas padrão para a obra...');
+      
+      // Criar as etapas padrão automaticamente para a nova obra
+      const { error: etapasError, data: etapasData } = await criarEtapasPadrao(data.id);
+      
+      if (etapasError) {
+        console.error('Erro ao criar etapas padrão:', etapasError);
+        // Registrar detalhes do erro, mas continuar para a próxima página
+        if (etapasError.message) console.error('Mensagem:', etapasError.message);
+        if (etapasError.code) console.error('Código:', etapasError.code);
+        if (etapasError.details) console.error('Detalhes:', etapasError.details);
+      } else {
+        console.log('Etapas padrão criadas com sucesso:', etapasData);
+      }
 
       navigate(`/obras/${data.id}`);
     } catch (error) {
@@ -178,8 +199,8 @@ const NovaObra = () => {
                 </label>
                 <input
                   type="date"
-                  name="data_fim"
-                  value={formData.data_fim}
+                  name="data_previsao_termino"
+                  value={formData.data_previsao_termino}
                   onChange={handleChange}
                   className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-500"
                 />
