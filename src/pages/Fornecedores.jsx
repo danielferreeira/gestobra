@@ -84,18 +84,49 @@ const Fornecedores = () => {
       // Obter o usuário atual
       const { data: { user } } = await supabase.auth.getUser();
       
+      // Log para depuração
+      console.log('Buscando materiais para o usuário:', user.id);
+      
+      // IMPORTANTE: Remover temporariamente o filtro por usuário
       const { data, error } = await supabase
         .from('materiais')
         .select('*, fornecedores(id, nome)')
-        .eq('usuario_id', user.id)
         .order('nome');
       
-      if (error) throw error;
+      if (error) {
+        console.error('Erro detalhado ao buscar materiais:', error);
+        throw error;
+      }
       
-      setMateriais(data || []);
+      // Log detalhado para debug
+      console.log(`Materiais encontrados (total): ${data?.length || 0}`);
+      
+      // Filtrar materiais do usuário atual (se necessário)
+      // const materiaisDoUsuario = data?.filter(m => m.usuario_id === user.id) || [];
+      const materiaisDoUsuario = data || [];
+      
+      console.log(`Materiais do usuário atual: ${materiaisDoUsuario.length}`);
+      
+      if (materiaisDoUsuario.length > 0) {
+        // Exibir primeiros 3 materiais para conferência
+        console.log('Amostra de materiais:', 
+          materiaisDoUsuario.slice(0, 3).map(m => ({ 
+            id: m.id, 
+            nome: m.nome, 
+            fornecedor: m.fornecedores?.nome || 'Sem fornecedor',
+            usuario_id: m.usuario_id
+          }))
+        );
+      } else {
+        console.log('Nenhum material encontrado na consulta');
+      }
+      
+      setMateriais(materiaisDoUsuario);
+      return materiaisDoUsuario;
     } catch (error) {
       console.error('Erro ao carregar materiais:', error);
       setError('Erro ao carregar materiais. Por favor, tente novamente.');
+      return [];
     } finally {
       setLoading(false);
     }
@@ -208,11 +239,51 @@ const Fornecedores = () => {
     try {
       setLoading(true);
       
-      // Recarregar fornecedores e materiais após o upload bem-sucedido
-      await fetchFornecedores();
-      await fetchMateriais();
+      // Log detalhado do resultado para depuração
+      console.log('Resultado do upload de orçamento:', resultado);
       
-      toast.success(`${resultado.materiais.length} materiais processados com sucesso!`);
+      // Aguardar meio segundo para garantir que os dados estejam persistidos no banco
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Recarregar fornecedores e materiais após o upload bem-sucedido
+      const fornecedoresAtualizados = await fetchFornecedores();
+      console.log('Fornecedores recarregados após upload');
+      
+      const materiaisAtualizados = await fetchMateriais();
+      console.log('Materiais recarregados após upload:', materiaisAtualizados?.length || 0);
+      
+      // Forçar atualização do estado
+      if (resultado?.materiais?.length > 0) {
+        // Adicionar diretamente os materiais do resultado ao estado atual
+        // para garantir que sejam exibidos imediatamente
+        const materiaisDaResposta = resultado.materiais.map(m => ({
+          ...m,
+          fornecedores: { 
+            id: resultado.fornecedor.id,
+            nome: resultado.fornecedor.nome
+          }
+        }));
+        
+        console.log('Adicionando materiais diretamente do resultado:', materiaisDaResposta.length);
+        
+        // Combinar materiais existentes com os novos, evitando duplicatas
+        const materiaisIds = new Set(materiais.map(m => m.id));
+        const novosMateriais = [
+          ...materiais,
+          ...materiaisDaResposta.filter(m => !materiaisIds.has(m.id))
+        ];
+        
+        setMateriais(novosMateriais);
+      }
+      
+      // Mostrar uma mensagem mais informativa
+      const numMateriais = resultado.materiais?.length || 0;
+      const mensagem = `Upload concluído! ${numMateriais} materiais processados.`;
+      
+      toast.success(mensagem);
+      
+      // Trocar para a aba de materiais para mostrar os itens adicionados
+      setActiveTab('materiais');
       
       // Fechar o modal após alguns segundos
       setTimeout(() => {

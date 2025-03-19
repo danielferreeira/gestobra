@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { FaCloudUploadAlt, FaCheck, FaSpinner, FaExclamationTriangle, FaFileInvoiceDollar } from 'react-icons/fa';
 import { processarArquivoOrcamento, adicionarFornecedorFromOrcamento, adicionarMateriaisFromOrcamento } from '../services/materiaisService';
+import { supabase } from '../services/supabaseClient';
 
 const UploadOrcamento = ({ onSuccess, etapaId = null, obraId = null }) => {
   const [file, setFile] = useState(null);
@@ -12,6 +13,28 @@ const UploadOrcamento = ({ onSuccess, etapaId = null, obraId = null }) => {
     message: '',
     progress: 0
   });
+  const [fornecedores, setFornecedores] = useState([]);
+  const [fornecedorSelecionado, setFornecedorSelecionado] = useState(null);
+  const [usarFornecedorDoArquivo, setUsarFornecedorDoArquivo] = useState(true);
+
+  // Carregar lista de fornecedores
+  useEffect(() => {
+    const carregarFornecedores = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('fornecedores')
+          .select('id, nome, cnpj')
+          .order('nome');
+        
+        if (error) throw error;
+        setFornecedores(data || []);
+      } catch (err) {
+        console.error('Erro ao carregar fornecedores:', err);
+      }
+    };
+    
+    carregarFornecedores();
+  }, []);
 
   // Manipula a seleção de arquivo
   const handleFileChange = (e) => {
@@ -71,23 +94,44 @@ const UploadOrcamento = ({ onSuccess, etapaId = null, obraId = null }) => {
       });
 
       const { fornecedor, itens } = resultado.data;
+      console.log('Dados extraídos do orçamento:',
+        'Fornecedor:', fornecedor,
+        'Itens:', itens.length
+      );
 
       setProcessedData(resultado.data);
       
       // 2. Processar fornecedor
-      setProcessStatus({
-        step: 'fornecedor',
-        message: 'Processando dados do fornecedor...',
-        progress: 50
-      });
-
-      const fornecedorResult = await adicionarFornecedorFromOrcamento(fornecedor);
+      let fornecedorId;
       
-      if (!fornecedorResult.success) {
-        throw new Error(fornecedorResult.message || 'Erro ao processar fornecedor');
-      }
+      if (usarFornecedorDoArquivo) {
+        setProcessStatus({
+          step: 'fornecedor',
+          message: 'Processando dados do fornecedor...',
+          progress: 50
+        });
 
-      const fornecedorId = fornecedorResult.data.id;
+        const fornecedorResult = await adicionarFornecedorFromOrcamento(fornecedor);
+        console.log('Resultado do processamento do fornecedor:', fornecedorResult);
+        
+        if (!fornecedorResult.success) {
+          throw new Error(fornecedorResult.message || 'Erro ao processar fornecedor');
+        }
+
+        fornecedorId = fornecedorResult.data.id;
+        console.log('Fornecedor processado com ID:', fornecedorId);
+      } else if (fornecedorSelecionado) {
+        // Usar o fornecedor selecionado manualmente
+        fornecedorId = fornecedorSelecionado;
+        console.log('Usando fornecedor selecionado com ID:', fornecedorId);
+        setProcessStatus({
+          step: 'fornecedor',
+          message: 'Usando fornecedor selecionado...',
+          progress: 50
+        });
+      } else {
+        throw new Error('Selecione um fornecedor ou use o do arquivo');
+      }
 
       // 3. Processar materiais
       setProcessStatus({
@@ -96,7 +140,9 @@ const UploadOrcamento = ({ onSuccess, etapaId = null, obraId = null }) => {
         progress: 70
       });
 
+      console.log(`Iniciando processamento de ${itens.length} materiais para o fornecedor ${fornecedorId}...`);
       const materiaisResult = await adicionarMateriaisFromOrcamento(itens, fornecedorId, etapaId, obraId);
+      console.log('Resultado do processamento de materiais:', materiaisResult);
       
       // Mesmo com erros parciais, continuamos
       setProcessStatus({
@@ -107,6 +153,7 @@ const UploadOrcamento = ({ onSuccess, etapaId = null, obraId = null }) => {
 
       // Chamar callback de sucesso com os dados processados
       if (onSuccess) {
+        console.log('Enviando dados processados para o componente pai');
         onSuccess({
           fornecedor: {
             ...fornecedor,
@@ -117,6 +164,8 @@ const UploadOrcamento = ({ onSuccess, etapaId = null, obraId = null }) => {
           etapaId,
           obraId
         });
+      } else {
+        console.warn('Callback onSuccess não foi fornecido');
       }
 
     } catch (err) {
@@ -236,6 +285,43 @@ const UploadOrcamento = ({ onSuccess, etapaId = null, obraId = null }) => {
           </div>
         )}
         
+        {/* Opção para selecionar fornecedor ou usar o do arquivo */}
+        <div className="w-full mb-4">
+          <div className="flex items-center mb-2">
+            <input
+              type="checkbox"
+              id="usarFornecedorArquivo"
+              checked={usarFornecedorDoArquivo}
+              onChange={(e) => setUsarFornecedorDoArquivo(e.target.checked)}
+              className="mr-2"
+            />
+            <label htmlFor="usarFornecedorArquivo" className="text-sm text-blue-700">
+              Usar fornecedor do arquivo
+            </label>
+          </div>
+          
+          {!usarFornecedorDoArquivo && (
+            <div className="mt-2">
+              <label className="block text-sm text-blue-700 mb-1">
+                Selecione um fornecedor:
+              </label>
+              <select
+                value={fornecedorSelecionado || ''}
+                onChange={(e) => setFornecedorSelecionado(e.target.value)}
+                className="w-full p-2 border border-blue-200 rounded text-sm"
+                disabled={loading || usarFornecedorDoArquivo}
+              >
+                <option value="">Selecione um fornecedor</option>
+                {fornecedores.map(fornecedor => (
+                  <option key={fornecedor.id} value={fornecedor.id}>
+                    {fornecedor.nome} {fornecedor.cnpj ? `(${fornecedor.cnpj})` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+        
         {processStatus.step !== 'idle' && processStatus.step !== 'success' && processStatus.step !== 'error' && (
           <div className="w-full mb-4">
             <div className="flex justify-between text-xs text-blue-600 mb-1">
@@ -253,9 +339,9 @@ const UploadOrcamento = ({ onSuccess, etapaId = null, obraId = null }) => {
         
         <button
           onClick={handleProcessarOrcamento}
-          disabled={loading || !file}
+          disabled={loading || !file || (!usarFornecedorDoArquivo && !fornecedorSelecionado)}
           className={`w-full py-2 px-4 rounded-md flex items-center justify-center ${
-            loading || !file
+            loading || !file || (!usarFornecedorDoArquivo && !fornecedorSelecionado)
               ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
               : 'bg-blue-600 text-white hover:bg-blue-700'
           }`}

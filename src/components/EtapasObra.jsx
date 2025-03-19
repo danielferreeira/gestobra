@@ -671,6 +671,274 @@ const EtapasObra = ({ obraId, onOrcamentoChange, onProgressoChange }) => {
     }
   };
 
+  const renderTabs = () => {
+    return (
+      <div className="border-b border-gray-200 mb-6">
+        <nav className="-mb-px flex space-x-8">
+          <button
+            onClick={() => setActiveTab('info')}
+            className={`py-4 px-1 border-b-2 font-medium text-sm flex items-center ${
+              activeTab === 'info'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            <FaList className="mr-2" /> Informações
+          </button>
+          <button
+            onClick={() => setActiveTab('materiais')}
+            className={`py-4 px-1 border-b-2 font-medium text-sm flex items-center ${
+              activeTab === 'materiais'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            <FaBoxes className="mr-2" /> Materiais
+          </button>
+        </nav>
+      </div>
+    );
+  };
+
+  // Renderizar formulário de informações da etapa
+  const renderInfoForm = () => (
+    <div className="space-y-4">
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Nome da Etapa
+        </label>
+        <input
+          type="text"
+          name="nome"
+          value={formData.nome}
+          onChange={handleChange}
+          className="w-full border border-gray-300 rounded-md px-3 py-2"
+          required
+        />
+      </div>
+      
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Descrição
+        </label>
+        <textarea
+          name="descricao"
+          value={formData.descricao}
+          onChange={handleChange}
+          className="w-full border border-gray-300 rounded-md px-3 py-2"
+          rows="3"
+        />
+      </div>
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Data de Início
+          </label>
+          <input
+            type="date"
+            name="data_inicio"
+            value={formData.data_inicio}
+            onChange={handleChange}
+            className="w-full border border-gray-300 rounded-md px-3 py-2"
+          />
+        </div>
+        
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Data de Término
+          </label>
+          <input
+            type="date"
+            name="data_previsao_termino"
+            value={formData.data_previsao_termino}
+            onChange={handleChange}
+            className="w-full border border-gray-300 rounded-md px-3 py-2"
+          />
+        </div>
+        
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Status
+          </label>
+          <select
+            name="status"
+            value={formData.status}
+            onChange={handleChange}
+            className="w-full border border-gray-300 rounded-md px-3 py-2"
+          >
+            <option value="pendente">Pendente</option>
+            <option value="em_andamento">Em Andamento</option>
+            <option value="concluida">Concluída</option>
+          </select>
+        </div>
+        
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700">
+            Progresso (%)
+          </label>
+          {formData.progresso_automatico ? (
+            <div className="mt-2">
+              <div className="bg-blue-50 p-3 rounded-md">
+                <p className="text-sm text-blue-800">
+                  <span className="font-medium">Progresso calculado automaticamente:</span> {formData.progresso}%
+                  <br />
+                  <span className="text-xs">
+                    (Baseado na relação entre valor realizado e valor previsto)
+                  </span>
+                </p>
+              </div>
+            </div>
+          ) : (
+            <input
+              type="number"
+              name="progresso"
+              value={formData.progresso || ''}
+              onChange={handleChange}
+              min="0"
+              max="100"
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+            />
+          )}
+          <div className="mt-2">
+            <label className="inline-flex items-center">
+              <input
+                type="checkbox"
+                name="progresso_automatico"
+                checked={formData.progresso_automatico || false}
+                onChange={handleChange}
+                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              <span className="ml-2 text-sm text-gray-600">
+                Calcular progresso automaticamente com base nos valores financeiros
+              </span>
+            </label>
+          </div>
+        </div>
+        
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700">
+            Valor Previsto (R$)
+          </label>
+          <input
+            type="number"
+            name="valor_previsto"
+            value={formData.valor_previsto || ''}
+            onChange={handleChange}
+            min="0"
+            step="0.01"
+            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+          />
+        </div>
+
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700">
+            Valor Realizado (R$)
+          </label>
+          <input
+            type="number"
+            name="valor_realizado"
+            value={formData.valor_realizado || ''}
+            onChange={handleChange}
+            min="0"
+            step="0.01"
+            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+          />
+        </div>
+      </div>
+    </div>
+  );
+
+  // Renderizar aba de materiais
+  const renderMateriaisTab = () => (
+    <div>      
+      <div id="materiais-container">
+        {currentEtapa && (
+          <EtapaMateriais 
+            etapaId={currentEtapa.id} 
+            obraId={obraId} 
+            onUpdate={async () => {
+              try {
+                console.log('Atualizando etapa após alteração de materiais');
+                
+                // Recarregar etapas para atualizar os valores
+                await fetchEtapas();
+                
+                // Buscar a etapa atual atualizada
+                const { data: etapaAtualizada, error: etapaError } = await supabase
+                  .from('etapas_obra')
+                  .select('*')
+                  .eq('id', currentEtapa.id)
+                  .single();
+                  
+                if (etapaError) throw etapaError;
+                
+                console.log('Etapa atualizada:', etapaAtualizada);
+                
+                // Atualizar o estado do formulário com os novos valores
+                setFormData(prev => ({
+                  ...prev,
+                  valor_realizado: etapaAtualizada.valor_realizado || 0
+                }));
+
+                // Se o progresso é automático, atualizar o progresso
+                if (etapaAtualizada.progresso_automatico) {
+                  console.log('Recalculando progresso automático');
+                  
+                  let novoProgresso = calcularProgressoFinanceiro(
+                    etapaAtualizada.valor_realizado || 0,
+                    etapaAtualizada.valor_previsto || 0
+                  );
+                  
+                  console.log(`Valor realizado: ${etapaAtualizada.valor_realizado}, Valor previsto: ${etapaAtualizada.valor_previsto}`);
+                  console.log(`Novo progresso calculado: ${novoProgresso}%`);
+                  
+                  // Garantir que o valor seja um inteiro para o banco de dados
+                  // Para valores muito pequenos, garantir pelo menos 1% se houver algum valor realizado
+                  if (etapaAtualizada.valor_realizado > 0 && novoProgresso < 1) {
+                    novoProgresso = 1; // Mínimo de 1% se houver valor realizado
+                  } else {
+                    novoProgresso = Math.round(novoProgresso); // Arredondar para inteiro
+                  }
+
+                  // Atualizar o progresso no banco de dados
+                  const { error: updateError } = await supabase
+                    .from('etapas_obra')
+                    .update({
+                      progresso: novoProgresso
+                    })
+                    .eq('id', etapaAtualizada.id);
+
+                  if (updateError) throw updateError;
+
+                  console.log(`Progresso atualizado para ${novoProgresso}%`);
+                  
+                  // Atualizar o formulário com o novo progresso
+                  setFormData(prev => ({
+                    ...prev,
+                    valor_realizado: etapaAtualizada.valor_realizado || 0,
+                    progresso: novoProgresso
+                  }));
+
+                  // Recarregar etapas novamente para refletir a mudança no progresso
+                  await fetchEtapas();
+                }
+                
+                // Notificar sobre mudança no progresso
+                if (onProgressoChange) {
+                  onProgressoChange();
+                }
+              } catch (error) {
+                console.error('Erro ao atualizar etapa após mudança nos materiais:', error);
+                setError('Erro ao atualizar etapa. Por favor, tente novamente.');
+              }
+            }}
+          />
+        )}
+      </div>
+    </div>
+  );
+
   if (loading) {
     return (
       <div className="flex items-center justify-center p-8">
@@ -883,184 +1151,12 @@ const EtapasObra = ({ obraId, onOrcamentoChange, onProgressoChange }) => {
               {formData.id ? 'Editar Etapa' : 'Nova Etapa'}
             </h2>
             
-            {/* Abas */}
-            <div className="border-b border-gray-200 mb-4">
-              <nav className="-mb-px flex space-x-8">
-                <button
-                  onClick={() => setActiveTab('info')}
-                  className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                    activeTab === 'info'
-                      ? 'border-blue-500 text-blue-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  }`}
-                >
-                  Informações
-                </button>
-                {formData.id && (
-                  <button
-                    onClick={() => setActiveTab('materiais')}
-                    className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                      activeTab === 'materiais'
-                        ? 'border-blue-500 text-blue-600'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                    }`}
-                  >
-                    Materiais
-                  </button>
-                )}
-              </nav>
-            </div>
+            {renderTabs()}
             
             {/* Conteúdo da aba de Informações */}
             {activeTab === 'info' && (
               <form onSubmit={formData.id ? handleUpdate : handleSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Nome da Etapa
-                </label>
-                <input
-                  type="text"
-                  name="nome"
-                  value={formData.nome}
-                  onChange={handleChange}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2"
-                  required
-                />
-              </div>
-              
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Descrição
-                </label>
-                <textarea
-                  name="descricao"
-                  value={formData.descricao}
-                  onChange={handleChange}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2"
-                  rows="3"
-                  />
-              </div>
-              
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Data de Início
-                  </label>
-                  <input
-                    type="date"
-                    name="data_inicio"
-                    value={formData.data_inicio}
-                    onChange={handleChange}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2"
-                  />
-                </div>
-                
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Data de Término
-                  </label>
-                  <input
-                    type="date"
-                    name="data_previsao_termino"
-                    value={formData.data_previsao_termino}
-                    onChange={handleChange}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2"
-                  />
-              </div>
-              
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Status
-                </label>
-                <select
-                  name="status"
-                  value={formData.status}
-                  onChange={handleChange}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2"
-                >
-                  <option value="pendente">Pendente</option>
-                  <option value="em_andamento">Em Andamento</option>
-                  <option value="concluida">Concluída</option>
-                </select>
-              </div>
-              
-
-                  {/* Progresso */}
-              <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700">
-                      Progresso (%)
-                </label>
-                    {formData.progresso_automatico ? (
-                      <div className="mt-2">
-                        <div className="bg-blue-50 p-3 rounded-md">
-                          <p className="text-sm text-blue-800">
-                            <span className="font-medium">Progresso calculado automaticamente:</span> {formData.progresso}%
-                            <br />
-                            <span className="text-xs">
-                              (Baseado na relação entre valor realizado e valor previsto)
-                            </span>
-                          </p>
-                        </div>
-                      </div>
-                    ) : (
-                <input
-                        type="number"
-                  name="progresso"
-                        value={formData.progresso || ''}
-                        onChange={handleChange}
-                  min="0"
-                  max="100"
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                      />
-                    )}
-                    <div className="mt-2">
-                      <label className="inline-flex items-center">
-                        <input
-                          type="checkbox"
-                          name="progresso_automatico"
-                          checked={formData.progresso_automatico || false}
-                          onChange={handleChange}
-                          className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                        />
-                        <span className="ml-2 text-sm text-gray-600">
-                          Calcular progresso automaticamente com base nos valores financeiros
-                        </span>
-                      </label>
-                    </div>
-              </div>
-              
-                  {/* Valor Previsto */}
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700">
-                      Valor Previsto (R$)
-                    </label>
-                    <input
-                      type="number"
-                      name="valor_previsto"
-                      value={formData.valor_previsto || ''}
-                      onChange={handleChange}
-                      min="0"
-                      step="0.01"
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                    />
-                  </div>
-
-                  {/* Valor Realizado */}
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700">
-                      Valor Realizado (R$)
-                    </label>
-                    <input
-                      type="number"
-                      name="valor_realizado"
-                      value={formData.valor_realizado || ''}
-                      onChange={handleChange}
-                      min="0"
-                      step="0.01"
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                    />
-                  </div>
-                </div>
+                {renderInfoForm()}
 
                 <div className="flex justify-end space-x-3 pt-4">
                 <button
@@ -1090,92 +1186,7 @@ const EtapasObra = ({ obraId, onOrcamentoChange, onProgressoChange }) => {
             
             {/* Conteúdo da aba de Materiais */}
             {activeTab === 'materiais' && (
-              <div>
-                {currentEtapa ? (
-                  <EtapaMateriais 
-                    etapaId={currentEtapa.id} 
-                    obraId={obraId} 
-                    onUpdate={async () => {
-                      try {
-                        // Recarregar etapas para atualizar os valores
-                        await fetchEtapas();
-                        
-                        // Buscar a etapa atual atualizada
-                        const { data: etapaAtualizada, error: etapaError } = await supabase
-                          .from('etapas_obra')
-                          .select('*')
-                          .eq('id', currentEtapa.id)
-                          .single();
-                          
-                        if (etapaError) throw etapaError;
-                        
-                        // Atualizar o estado do formulário com os novos valores
-                        setFormData(prev => ({
-                          ...prev,
-                          valor_realizado: etapaAtualizada.valor_realizado
-                        }));
-
-                        // Se o progresso é automático, atualizar o progresso
-                        if (etapaAtualizada.progresso_automatico) {
-                          let novoProgresso = calcularProgressoFinanceiro(
-                            etapaAtualizada.valor_realizado || 0,
-                            etapaAtualizada.valor_previsto || 0
-                          );
-                          
-                          // Garantir que o valor seja um inteiro para o banco de dados
-                          // Para valores muito pequenos, garantir pelo menos 1% se houver algum valor realizado
-                          if (etapaAtualizada.valor_realizado > 0 && novoProgresso < 1) {
-                            novoProgresso = 1; // Mínimo de 1% se houver valor realizado
-                          } else {
-                            novoProgresso = Math.round(novoProgresso); // Arredondar para inteiro
-                          }
-
-                          // Atualizar o progresso no banco de dados
-                          const { error: updateError } = await supabase
-                            .from('etapas_obra')
-                            .update({
-                              progresso: novoProgresso
-                            })
-                            .eq('id', etapaAtualizada.id);
-
-                          if (updateError) throw updateError;
-
-                          // Atualizar o formulário com o novo progresso
-                          setFormData(prev => ({
-                            ...prev,
-                            valor_realizado: etapaAtualizada.valor_realizado,
-                            progresso: novoProgresso
-                          }));
-
-                          // Recarregar etapas novamente para refletir a mudança no progresso
-                          await fetchEtapas();
-                        }
-                        
-                        // Notificar sobre mudança no progresso
-                        if (onProgressoChange) {
-                          onProgressoChange();
-                        }
-                      } catch (error) {
-                        console.error('Erro ao atualizar etapa após mudança nos materiais:', error);
-                        setError('Erro ao atualizar etapa. Por favor, tente novamente.');
-                      }
-                    }}
-                  />
-                ) : (
-                  <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4">
-                    <div className="flex">
-                      <div className="flex-shrink-0">
-                        <FaExclamationTriangle className="h-5 w-5 text-yellow-400" />
-                      </div>
-                      <div className="ml-3">
-                        <p className="text-sm text-yellow-700">
-                          Selecione uma etapa para gerenciar seus materiais.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
+              renderMateriaisTab()
             )}
           </div>
         </div>

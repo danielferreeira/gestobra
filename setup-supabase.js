@@ -66,6 +66,7 @@ async function setupSupabase() {
     } else {
       const documentosBucketExists = buckets.some(bucket => bucket.name === 'documentos');
       const comprovantesBucketExists = buckets.some(bucket => bucket.name === 'comprovantes');
+      const arquivosBucketExists = buckets.some(bucket => bucket.name === 'arquivos');
       
       if (!documentosBucketExists) {
         console.log('Criando bucket "documentos"...');
@@ -88,6 +89,55 @@ async function setupSupabase() {
         
         if (error) {
           console.error('Erro ao criar bucket "comprovantes":', error);
+        }
+      }
+      
+      if (!arquivosBucketExists) {
+        console.log('Criando bucket "arquivos"...');
+        const { error } = await supabase.storage.createBucket('arquivos', {
+          public: true, // Acesso público para facilitar o compartilhamento
+          fileSizeLimit: 10485760, // 10MB
+        });
+        
+        if (error) {
+          console.error('Erro ao criar bucket "arquivos":', error);
+        } else {
+          console.log('Bucket "arquivos" criado com sucesso!');
+          
+          // Adicionar políticas RLS para o bucket arquivos - permitir leitura pública
+          console.log('Configurando políticas de acesso para o bucket "arquivos"...');
+          
+          // Política para permitir SELECT (leitura) para todos
+          const selectPolicyName = 'allow_public_read_arquivos';
+          const selectPolicyDefinition = '(bucket_id = \'arquivos\'::text)';
+          const { error: selectPolicyError } = await supabase.rpc('create_storage_policy', {
+            name: selectPolicyName,
+            bucket_id: 'arquivos',
+            definition: selectPolicyDefinition,
+            operation: 'SELECT'
+          });
+          
+          if (selectPolicyError) {
+            console.error('Erro ao criar política SELECT para bucket "arquivos":', selectPolicyError);
+          } else {
+            console.log('Política de leitura pública criada com sucesso para bucket "arquivos"');
+          }
+          
+          // Política para permitir INSERT (upload) para usuários autenticados
+          const insertPolicyName = 'allow_authenticated_insert_arquivos';
+          const insertPolicyDefinition = '((bucket_id = \'arquivos\'::text) AND (auth.role() = \'authenticated\'::text))';
+          const { error: insertPolicyError } = await supabase.rpc('create_storage_policy', {
+            name: insertPolicyName,
+            bucket_id: 'arquivos',
+            definition: insertPolicyDefinition,
+            operation: 'INSERT'
+          });
+          
+          if (insertPolicyError) {
+            console.error('Erro ao criar política INSERT para bucket "arquivos":', insertPolicyError);
+          } else {
+            console.log('Política de upload para usuários autenticados criada com sucesso para bucket "arquivos"');
+          }
         }
       }
     }

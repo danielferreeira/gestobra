@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { FaPlus, FaEdit, FaTrash, FaBoxes, FaSearch, FaBuilding, FaCloudUploadAlt } from 'react-icons/fa';
+import { FaPlus, FaEdit, FaTrash, FaBoxes, FaSearch, FaBuilding } from 'react-icons/fa';
 import { supabase } from '../services/supabaseClient';
 import { getMateriais } from '../services/materiaisService';
-import UploadOrcamento from './UploadOrcamento';
 
 const EtapaMateriais = ({ etapaId, obraId, onUpdate }) => {
   const [materiais, setMateriais] = useState([]);
@@ -14,7 +13,6 @@ const EtapaMateriais = ({ etapaId, obraId, onUpdate }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [fornecedores, setFornecedores] = useState([]);
   const [selectedFornecedor, setSelectedFornecedor] = useState('');
-  const [modalTab, setModalTab] = useState('manual'); // 'manual' ou 'upload'
   const [formData, setFormData] = useState({
     material_id: '',
     quantidade: 1,
@@ -107,7 +105,7 @@ const EtapaMateriais = ({ etapaId, obraId, onUpdate }) => {
   };
 
   // Abrir modal para adicionar/editar material
-  const openModal = (material = null, tab = 'manual') => {
+  const openModal = (material = null) => {
     if (material) {
       setCurrentMaterial(material);
       // Se for edição, identificar o fornecedor do material
@@ -122,8 +120,6 @@ const EtapaMateriais = ({ etapaId, obraId, onUpdate }) => {
         nota_fiscal: material.nota_fiscal || '',
         observacoes: material.observacoes || ''
       });
-      
-      setModalTab('manual'); // Quando editando, sempre mostrar a aba manual
     } else {
       setCurrentMaterial(null);
       setSelectedFornecedor('');
@@ -135,7 +131,6 @@ const EtapaMateriais = ({ etapaId, obraId, onUpdate }) => {
         nota_fiscal: '',
         observacoes: ''
       });
-      setModalTab(tab);
     }
     
     setShowModal(true);
@@ -215,8 +210,7 @@ const EtapaMateriais = ({ etapaId, obraId, onUpdate }) => {
         return total + (isNaN(valor) ? 0 : valor);
       }, 0);
 
-      console.log('Materiais atuais:', materiaisAtuais);
-      console.log('Total calculado:', totalMateriais);
+      console.log(`Atualizando valor realizado da etapa ${etapaId} para R$ ${totalMateriais.toFixed(2)}`);
 
       // Atualizar o valor realizado da etapa
       const { data: updateResult, error: updateError } = await supabase
@@ -230,7 +224,7 @@ const EtapaMateriais = ({ etapaId, obraId, onUpdate }) => {
 
       if (updateError) throw updateError;
 
-      console.log('Resultado da atualização:', updateResult);
+      console.log('Valor realizado atualizado com sucesso:', updateResult);
 
       // Recarregar os materiais da etapa para atualizar a interface
       const { data: newMateriaisEtapa, error: reloadError } = await supabase
@@ -257,10 +251,16 @@ const EtapaMateriais = ({ etapaId, obraId, onUpdate }) => {
 
       setMateriaisEtapa(newMateriaisEtapa || []);
 
-      // Notificar o componente pai sobre a atualização
+      // Notificar o componente pai sobre a atualização para recalcular o progresso
       if (onUpdate) {
-        // Aguardar a atualização ser concluída antes de notificar
-        await onUpdate();
+        setTimeout(async () => {
+          // Aguardar a atualização ser concluída antes de notificar
+          try {
+            await onUpdate();
+          } catch (error) {
+            console.error('Erro ao notificar componente pai:', error);
+          }
+        }, 500);
       }
 
     } catch (error) {
@@ -341,53 +341,18 @@ const EtapaMateriais = ({ etapaId, obraId, onUpdate }) => {
     }
   };
 
-  // Filtrar materiais para o select com base no fornecedor selecionado e termo de busca
-  const materiaisFiltrados = materiais.filter(material => 
-    (selectedFornecedor === '' || material.fornecedor_id === selectedFornecedor) &&
-    ((material.nome?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-    (material.categoria?.toLowerCase() || '').includes(searchTerm.toLowerCase()))
-  );
+  // Filtrar materiais por termo de busca e por fornecedor
+  const materiaisFiltrados = materiais.filter(material => {
+    const matchesSearch = material.nome.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesFornecedor = !selectedFornecedor || material.fornecedor_id === selectedFornecedor;
+    return matchesSearch && matchesFornecedor;
+  });
 
   // Calcular valor total dos materiais
-  const valorTotalMateriais = materiaisEtapa.reduce((total, item) => total + parseFloat(item.valor_total || 0), 0);
+  const valorTotal = materiaisEtapa.reduce((total, item) => 
+    total + parseFloat(item.valor_total || 0), 0);
 
-  // Manipular resultado do upload de orçamento
-  const handleUploadSuccess = async (resultado) => {
-    try {
-      setLoading(true);
-      
-      // Recarregar fornecedores para incluir o novo fornecedor (se foi adicionado)
-      const { data: fornecedoresData, error: fornecedoresError } = await supabase
-        .from('fornecedores')
-        .select('*')
-        .order('nome');
-      
-      if (fornecedoresError) throw fornecedoresError;
-      
-      setFornecedores(fornecedoresData || []);
-      
-      // Recarregar materiais para incluir os novos materiais
-      const { data: materiaisData, error: materiaisError } = await getMateriais();
-      
-      if (materiaisError) throw materiaisError;
-      
-      setMateriais(materiaisData || []);
-      
-      // Fechar o modal após processamento bem-sucedido
-      setTimeout(() => {
-        setShowModal(false);
-        
-        // Atualizar o valor realizado da etapa
-        atualizarValorRealizadoEtapa();
-      }, 3000);
-      
-    } catch (error) {
-      console.error('Erro ao atualizar após upload:', error);
-      setError('Erro ao atualizar dados após upload: ' + error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const handleOpenModal = () => openModal(null);
 
   if (loading && materiaisEtapa.length === 0) {
     return (
@@ -405,13 +370,7 @@ const EtapaMateriais = ({ etapaId, obraId, onUpdate }) => {
         </h3>
         <div className="flex space-x-2">
           <button
-            onClick={() => openModal(null, 'upload')}
-            className="flex items-center bg-green-600 text-white px-3 py-2 rounded-md hover:bg-green-700"
-          >
-            <FaCloudUploadAlt className="mr-2" /> Upload de Orçamento
-          </button>
-          <button
-            onClick={() => openModal(null, 'manual')}
+            onClick={handleOpenModal}
             className="flex items-center bg-blue-600 text-white px-3 py-2 rounded-md hover:bg-blue-700"
           >
             <FaPlus className="mr-2" /> Adicionar Material
@@ -434,7 +393,7 @@ const EtapaMateriais = ({ etapaId, obraId, onUpdate }) => {
           </div>
           <div>
             <span className="text-sm text-blue-800 font-medium">Valor Total:</span>
-            <span className="ml-2 font-bold">{formatCurrency(valorTotalMateriais)}</span>
+            <span className="ml-2 font-bold">{formatCurrency(valorTotal)}</span>
           </div>
         </div>
       </div>
@@ -444,21 +403,6 @@ const EtapaMateriais = ({ etapaId, obraId, onUpdate }) => {
         <div className="bg-gray-50 border border-gray-200 rounded-md p-8 text-center">
           <FaBoxes className="text-4xl text-gray-400 mx-auto mb-3" />
           <h3 className="text-lg font-medium text-gray-600 mb-2">Nenhum material adicionado</h3>
-          <p className="text-gray-500 mb-4">Adicione materiais para esta etapa da obra ou faça upload de um orçamento.</p>
-          <div className="flex flex-col sm:flex-row justify-center gap-3">
-            <button
-              onClick={() => openModal(null, 'upload')}
-              className="flex items-center justify-center bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700"
-            >
-              <FaCloudUploadAlt className="mr-2" /> Upload de Orçamento
-            </button>
-            <button
-              onClick={() => openModal(null, 'manual')}
-              className="flex items-center justify-center bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
-            >
-              <FaPlus className="mr-2" /> Adicionar Material
-            </button>
-          </div>
         </div>
       ) : (
         <div className="overflow-x-auto">
@@ -529,53 +473,31 @@ const EtapaMateriais = ({ etapaId, obraId, onUpdate }) => {
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-2xl">
-            <h2 className="text-xl font-semibold mb-4">
-              {currentMaterial ? 'Editar Material' : 'Adicionar Material'}
-            </h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold">
+                {currentMaterial ? 'Editar Material' : 'Adicionar Material'}
+              </h2>
+              <button
+                onClick={closeModal}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                &times;
+              </button>
+            </div>
             
-            {/* Abas do modal */}
-            {!currentMaterial && (
-              <div className="border-b border-gray-200 mb-6">
-                <nav className="flex space-x-4">
-                  <button
-                    className={`py-2 px-1 border-b-2 font-medium ${
-                      modalTab === 'manual'
-                        ? 'border-blue-500 text-blue-600'
-                        : 'border-transparent text-gray-500 hover:text-gray-700'
-                    }`}
-                    onClick={() => setModalTab('manual')}
-                  >
-                    Cadastro Manual
-                  </button>
-                  <button
-                    className={`py-2 px-1 border-b-2 font-medium ${
-                      modalTab === 'upload'
-                        ? 'border-blue-500 text-blue-600'
-                        : 'border-transparent text-gray-500 hover:text-gray-700'
-                    }`}
-                    onClick={() => setModalTab('upload')}
-                  >
-                    Upload de Orçamento
-                  </button>
-                </nav>
-              </div>
-            )}
-            
-            {/* Conteúdo da aba de cadastro manual */}
-            {modalTab === 'manual' && (
-              <form id="formMaterial" onSubmit={handleSubmit}>
-                {/* Seleção de Fornecedor */}
-                <div className="mb-4">
-                  <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="fornecedor">
+            <form onSubmit={handleSubmit}>
+              <div className="space-y-4">
+                {/* Seleção de fornecedor */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Fornecedor
                   </label>
                   <select
-                    id="fornecedor"
                     value={selectedFornecedor}
                     onChange={handleFornecedorChange}
-                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                    className="w-full border border-gray-300 rounded-md px-3 py-2"
                   >
-                    <option value="">Selecione um fornecedor</option>
+                    <option value="">Todos os fornecedores</option>
                     {fornecedores.map(fornecedor => (
                       <option key={fornecedor.id} value={fornecedor.id}>
                         {fornecedor.nome}
@@ -584,188 +506,157 @@ const EtapaMateriais = ({ etapaId, obraId, onUpdate }) => {
                   </select>
                 </div>
                 
-                <div className="mb-4">
-                  <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="material_id">
+                {/* Pesquisa de material */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Material
                   </label>
                   <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <FaSearch className="text-gray-400" />
-                    </div>
                     <input
                       type="text"
-                      className="pl-10 pr-3 py-2 w-full border border-gray-300 rounded-md mb-2"
                       placeholder="Buscar material..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 pl-10"
+                    />
+                    <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                      <FaSearch className="text-gray-400" />
+                    </div>
+                  </div>
+                  
+                  {/* Lista de materiais */}
+                  <div className="mt-2 max-h-40 overflow-y-auto border border-gray-300 rounded-md">
+                    {materiaisFiltrados.length === 0 ? (
+                      <div className="p-3 text-sm text-gray-500">
+                        Nenhum material encontrado
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-gray-200">
+                        {materiaisFiltrados.map(material => (
+                          <div
+                            key={material.id}
+                            className={`p-3 hover:bg-blue-50 cursor-pointer ${
+                              formData.material_id === material.id ? 'bg-blue-50' : ''
+                            }`}
+                            onClick={() => {
+                              setFormData(prev => ({
+                                ...prev,
+                                material_id: material.id,
+                                valor_total: material.preco_unitario * prev.quantidade
+                              }));
+                            }}
+                          >
+                            <div className="flex justify-between">
+                              <div>
+                                <p className="font-medium text-gray-900">{material.nome}</p>
+                                {material.categoria && (
+                                  <p className="text-xs text-gray-500">{material.categoria}</p>
+                                )}
+                              </div>
+                              <div className="text-right">
+                                <p className="text-gray-600">{material.unidade}</p>
+                                <p className="font-medium">{formatCurrency(material.preco_unitario)}</p>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                
+                {/* Campos do formulário */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Quantidade
+                    </label>
+                    <input
+                      type="number"
+                      name="quantidade"
+                      value={formData.quantidade}
+                      onChange={handleChange}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2"
+                      min="0.01"
+                      step="0.01"
+                      required
                     />
                   </div>
-                  <select
-                    id="material_id"
-                    name="material_id"
-                    value={formData.material_id}
-                    onChange={handleChange}
-                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                    required
-                    disabled={!selectedFornecedor}
-                  >
-                    <option value="">
-                      {selectedFornecedor ? "Selecione um material" : "Primeiro selecione um fornecedor"}
-                    </option>
-                    {materiaisFiltrados.map(material => (
-                      <option key={material.id} value={material.id}>
-                        {material.nome} - {material.categoria} ({formatCurrency(material.preco_unitario)}/{material.unidade})
-                      </option>
-                    ))}
-                  </select>
-                  {!selectedFornecedor && (
-                    <p className="text-xs text-blue-500 mt-1">
-                      Selecione um fornecedor para ver os materiais disponíveis
-                    </p>
-                  )}
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Valor Total (R$)
+                    </label>
+                    <input
+                      type="number"
+                      name="valor_total"
+                      value={formData.valor_total}
+                      onChange={handleChange}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2"
+                      min="0"
+                      step="0.01"
+                      required
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Data de Compra
+                    </label>
+                    <input
+                      type="date"
+                      name="data_compra"
+                      value={formData.data_compra}
+                      onChange={handleChange}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Nota Fiscal
+                    </label>
+                    <input
+                      type="text"
+                      name="nota_fiscal"
+                      value={formData.nota_fiscal}
+                      onChange={handleChange}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2"
+                    />
+                  </div>
                 </div>
                 
-                <div className="mb-4">
-                  <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="quantidade">
-                    Quantidade
-                  </label>
-                  <input
-                    type="number"
-                    id="quantidade"
-                    name="quantidade"
-                    value={formData.quantidade}
-                    onChange={handleChange}
-                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                    required
-                    min="0.01"
-                    step="0.01"
-                  />
-                </div>
-                
-                <div className="mb-4">
-                  <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="valor_total">
-                    Valor Total (R$)
-                  </label>
-                  <input
-                    type="number"
-                    id="valor_total"
-                    name="valor_total"
-                    value={formData.valor_total}
-                    onChange={handleChange}
-                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                    required
-                    min="0"
-                    step="0.01"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    Valor calculado automaticamente com base na quantidade e preço unitário do material.
-                  </p>
-                </div>
-                
-                <div className="mb-4">
-                  <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="data_compra">
-                    Data de Compra
-                  </label>
-                  <input
-                    type="date"
-                    id="data_compra"
-                    name="data_compra"
-                    value={formData.data_compra}
-                    onChange={handleChange}
-                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                  />
-                </div>
-                
-                <div className="mb-4">
-                  <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="nota_fiscal">
-                    Nota Fiscal
-                  </label>
-                  <input
-                    type="text"
-                    id="nota_fiscal"
-                    name="nota_fiscal"
-                    value={formData.nota_fiscal}
-                    onChange={handleChange}
-                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                  />
-                </div>
-                
-                <div className="mb-4">
-                  <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="observacoes">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Observações
                   </label>
                   <textarea
-                    id="observacoes"
                     name="observacoes"
                     value={formData.observacoes}
                     onChange={handleChange}
-                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                    rows="3"
-                  ></textarea>
+                    className="w-full border border-gray-300 rounded-md px-3 py-2"
+                    rows="2"
+                  />
                 </div>
-                
-                <div className="flex justify-end space-x-2">
-                  <button
-                    type="button"
-                    onClick={closeModal}
-                    className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    form="formMaterial"
-                    className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-                    disabled={loading}
-                  >
-                    {loading ? 'Salvando...' : 'Salvar'}
-                  </button>
-                </div>
-              </form>
-            )}
-            
-            {/* Conteúdo da aba de upload de orçamento */}
-            {modalTab === 'upload' && (
-              <UploadOrcamento 
-                etapaId={etapaId}
-                obraId={obraId}
-                onSuccess={handleUploadSuccess}
-              />
-            )}
-            
-            {/* Somente mostrar botões de cancelar/salvar no modo manual */}
-            {modalTab === 'manual' && (
-              <div className="flex justify-end space-x-2 mt-6">
+              </div>
+              
+              <div className="flex justify-end space-x-3 mt-6">
                 <button
                   type="button"
                   onClick={closeModal}
-                  className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded"
+                  className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  form="formMaterial"
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-                  disabled={loading}
+                  className="px-4 py-2 bg-blue-600 rounded-md text-white hover:bg-blue-700"
+                  disabled={loading || !formData.material_id}
                 >
                   {loading ? 'Salvando...' : 'Salvar'}
                 </button>
               </div>
-            )}
-            
-            {/* Mostrar apenas botão de fechar no modo upload */}
-            {modalTab === 'upload' && (
-              <div className="flex justify-end mt-6">
-                <button
-                  type="button"
-                  onClick={closeModal}
-                  className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded"
-                >
-                  Fechar
-                </button>
-              </div>
-            )}
+            </form>
           </div>
         </div>
       )}
