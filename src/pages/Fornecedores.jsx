@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FaPlus, FaEdit, FaTrash, FaExclamationTriangle, FaSearch, FaBuilding, FaTools, FaCloudUploadAlt } from 'react-icons/fa';
+import { FaPlus, FaEdit, FaTrash, FaExclamationTriangle, FaSearch, FaBuilding, FaTools, FaCloudUploadAlt, FaCheckSquare, FaSquare } from 'react-icons/fa';
 import { supabase } from '../services/supabaseClient';
 import { useNavigate } from 'react-router-dom';
 import { toast, Toaster } from 'react-hot-toast';
@@ -17,6 +17,12 @@ const Fornecedores = () => {
   const [showModalUpload, setShowModalUpload] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  
+  // Estados para seleção múltipla
+  const [selectedFornecedores, setSelectedFornecedores] = useState([]);
+  const [selectedMateriais, setSelectedMateriais] = useState([]);
+  const [selectAllFornecedores, setSelectAllFornecedores] = useState(false);
+  const [selectAllMateriais, setSelectAllMateriais] = useState(false);
   
   // Estados para o formulário de fornecedor
   const [fornecedorForm, setFornecedorForm] = useState({
@@ -42,6 +48,14 @@ const Fornecedores = () => {
     fetchFornecedores();
     fetchMateriais();
   }, []);
+
+  // Resetar seleções quando mudar de aba ou termo de busca
+  useEffect(() => {
+    setSelectedFornecedores([]);
+    setSelectedMateriais([]);
+    setSelectAllFornecedores(false);
+    setSelectAllMateriais(false);
+  }, [activeTab, searchTerm]);
 
   // Função para formatar moeda
   const formatCurrency = (value) => {
@@ -144,6 +158,148 @@ const Fornecedores = () => {
     material.descricao?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     material.fornecedores?.nome?.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  // Manipular seleção individual de fornecedor
+  const handleSelectFornecedor = (id) => {
+    setSelectedFornecedores(prev => {
+      if (prev.includes(id)) {
+        return prev.filter(item => item !== id);
+      } else {
+        return [...prev, id];
+      }
+    });
+  };
+
+  // Manipular seleção individual de material
+  const handleSelectMaterial = (id) => {
+    setSelectedMateriais(prev => {
+      if (prev.includes(id)) {
+        return prev.filter(item => item !== id);
+      } else {
+        return [...prev, id];
+      }
+    });
+  };
+
+  // Manipular seleção de todos os fornecedores
+  const handleSelectAllFornecedores = () => {
+    if (selectAllFornecedores) {
+      setSelectedFornecedores([]);
+    } else {
+      setSelectedFornecedores(fornecedoresFiltrados.map(f => f.id));
+    }
+    setSelectAllFornecedores(!selectAllFornecedores);
+  };
+
+  // Manipular seleção de todos os materiais
+  const handleSelectAllMateriais = () => {
+    if (selectAllMateriais) {
+      setSelectedMateriais([]);
+    } else {
+      setSelectedMateriais(materiaisFiltrados.map(m => m.id));
+    }
+    setSelectAllMateriais(!selectAllMateriais);
+  };
+
+  // Excluir fornecedores selecionados
+  const handleDeleteSelectedFornecedores = async () => {
+    if (selectedFornecedores.length === 0) {
+      toast.error('Nenhum fornecedor selecionado para exclusão');
+      return;
+    }
+
+    if (window.confirm(`Tem certeza que deseja excluir ${selectedFornecedores.length} fornecedores selecionados?`)) {
+      try {
+        setLoading(true);
+        
+        // Manter track de erros
+        const errors = [];
+        
+        // Excluir cada fornecedor selecionado
+        for (const id of selectedFornecedores) {
+          const { error } = await supabase
+            .from('fornecedores')
+            .delete()
+            .eq('id', id);
+            
+          if (error) {
+            errors.push({ id, message: error.message });
+          }
+        }
+        
+        // Se houver erros, mostrar mensagem
+        if (errors.length > 0) {
+          console.error('Erros ao excluir fornecedores:', errors);
+          toast.error(`Ocorreram erros ao excluir ${errors.length} fornecedores`);
+        } else {
+          toast.success(`${selectedFornecedores.length} fornecedores excluídos com sucesso`);
+        }
+        
+        // Atualizar lista de fornecedores
+        await fetchFornecedores();
+        
+        // Limpar seleção
+        setSelectedFornecedores([]);
+        setSelectAllFornecedores(false);
+        
+      } catch (error) {
+        console.error('Erro ao excluir fornecedores:', error);
+        toast.error('Erro ao excluir fornecedores');
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
+  // Excluir materiais selecionados
+  const handleDeleteSelectedMateriais = async () => {
+    if (selectedMateriais.length === 0) {
+      toast.error('Nenhum material selecionado para exclusão');
+      return;
+    }
+
+    if (window.confirm(`Tem certeza que deseja excluir ${selectedMateriais.length} materiais selecionados?`)) {
+      try {
+        setLoading(true);
+        
+        // Manter track de erros
+        const errors = [];
+        
+        // Excluir cada material selecionado
+        for (const id of selectedMateriais) {
+          const { error } = await supabase
+            .from('materiais')
+            .delete()
+            .eq('id', id);
+            
+          if (error) {
+            errors.push({ id, message: error.message });
+          }
+        }
+        
+        // Se houver erros, mostrar mensagem
+        if (errors.length > 0) {
+          console.error('Erros ao excluir materiais:', errors);
+          toast.error(`Ocorreram erros ao excluir ${errors.length} materiais`);
+        } else {
+          toast.success(`${selectedMateriais.length} materiais excluídos com sucesso`);
+        }
+        
+        // Atualizar lista de materiais
+        await fetchMateriais();
+        
+        // Limpar seleção
+        setSelectedMateriais([]);
+        setSelectAllMateriais(false);
+        
+      } catch (error) {
+        console.error('Erro ao excluir materiais:', error);
+        toast.error('Erro ao excluir materiais');
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
 
   // Manipular mudanças no formulário de fornecedor
   const handleFornecedorFormChange = (e) => {
@@ -362,6 +518,13 @@ const Fornecedores = () => {
       // Criar uma cópia dos dados do formulário para enviar
       const materialData = { ...materialForm };
       
+      // Validar fornecedor
+      if (!materialData.fornecedor_id) {
+        toast.error('Por favor, selecione um fornecedor.');
+        setLoading(false);
+        return;
+      }
+      
       // Obter o ID do usuário atual
       const { data: { user } } = await supabase.auth.getUser();
       
@@ -468,75 +631,109 @@ const Fornecedores = () => {
   };
 
   return (
-    <div>
+    <div className="container mx-auto px-4 py-8">
       <Toaster position="top-right" />
       
-      <div className="container mx-auto px-4 py-6">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold">Gestão de Fornecedores e Materiais</h1>
+      <h1 className="text-2xl font-bold text-gray-800 mb-6">Gestão de Fornecedores e Materiais</h1>
+      
+      {/* Barra de pesquisa */}
+      <div className="relative mb-6">
+        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+          <FaSearch className="text-gray-400" />
         </div>
-        
-        {error && (
-          <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4">
-            <div className="flex">
-              <FaExclamationTriangle className="h-5 w-5 text-red-500 mr-2" />
-              <span>{error}</span>
+        <input
+          type="text"
+          placeholder="Buscar por nome, CNPJ ou descrição..."
+          className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+        />
+      </div>
+      
+      {/* Abas */}
+      <div className="border-b border-gray-200 mb-6">
+        <nav className="flex space-x-8">
+          <button
+            className={`py-4 px-1 ${
+              activeTab === 'fornecedores'
+                ? 'border-b-2 border-blue-500 text-blue-600'
+                : 'text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            } font-medium`}
+            onClick={() => setActiveTab('fornecedores')}
+          >
+            <FaBuilding className="inline-block mr-2" /> Fornecedores
+          </button>
+          <button
+            className={`py-4 px-1 ${
+              activeTab === 'materiais'
+                ? 'border-b-2 border-blue-500 text-blue-600'
+                : 'text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            } font-medium`}
+            onClick={() => setActiveTab('materiais')}
+          >
+            <FaTools className="inline-block mr-2" /> Materiais
+          </button>
+        </nav>
+      </div>
+      
+      {error && (
+        <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6" role="alert">
+          <div className="flex">
+            <div className="flex-shrink-0">
+              <FaExclamationTriangle className="h-5 w-5 text-red-500" />
+            </div>
+            <div className="ml-3">
+              <p className="text-sm">{error}</p>
             </div>
           </div>
-        )}
-        
-        {/* Barra de pesquisa */}
-        <div className="mb-6">
-          <div className="relative">
-            <input
-              type="text"
-              placeholder="Buscar por nome, CNPJ ou descrição..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <div className="absolute left-3 top-2.5 text-gray-400">
-              <FaSearch />
-            </div>
-          </div>
         </div>
-        
-        {/* Abas */}
-        <div className="border-b border-gray-200 mb-6">
-          <nav className="-mb-px flex space-x-8">
-            <button
-              onClick={() => setActiveTab('fornecedores')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm flex items-center ${
-                activeTab === 'fornecedores'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              <FaBuilding className="mr-2" /> Fornecedores
-            </button>
-            <button
-              onClick={() => setActiveTab('materiais')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm flex items-center ${
-                activeTab === 'materiais'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              <FaTools className="mr-2" /> Materiais
-            </button>
-          </nav>
-        </div>
-        
+      )}
+      
+      {/* Conteúdo das abas */}
+      <div>
         {/* Conteúdo da aba de Fornecedores */}
         {activeTab === 'fornecedores' && (
           <div>
-            <div className="flex justify-end mb-4">
-              <button
-                onClick={openCreateFornecedorModal}
-                className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 flex items-center"
-              >
-                <FaPlus className="mr-2" /> Novo Fornecedor
-              </button>
+            <div className="flex flex-col sm:flex-row justify-between gap-2 mb-4">
+              <div className="flex space-x-2">
+                <button
+                  onClick={openCreateFornecedorModal}
+                  className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 flex items-center"
+                >
+                  <FaPlus className="mr-2" /> Novo Fornecedor
+                </button>
+              </div>
+              
+              {/* Ações para itens selecionados */}
+              <div className="flex space-x-2">
+                <button
+                  onClick={handleSelectAllFornecedores}
+                  className="flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none"
+                  disabled={fornecedoresFiltrados.length === 0}
+                >
+                  {selectAllFornecedores ? (
+                    <>
+                      <FaCheckSquare className="mr-2" /> Desmarcar Todos
+                    </>
+                  ) : (
+                    <>
+                      <FaSquare className="mr-2" /> Selecionar Todos
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={handleDeleteSelectedFornecedores}
+                  className={`flex items-center justify-center px-4 py-2 border rounded-md shadow-sm text-sm font-medium focus:outline-none ${
+                    selectedFornecedores.length > 0 
+                      ? 'text-white bg-red-600 hover:bg-red-700 border-red-500' 
+                      : 'text-gray-500 bg-gray-200 border-gray-300 cursor-not-allowed'
+                  }`}
+                  disabled={selectedFornecedores.length === 0 || loading}
+                >
+                  <FaTrash className="mr-2" /> 
+                  Excluir Selecionados ({selectedFornecedores.length})
+                </button>
+              </div>
             </div>
             
             {loading && fornecedores.length === 0 ? (
@@ -550,46 +747,66 @@ const Fornecedores = () => {
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {fornecedoresFiltrados.map(fornecedor => (
-                  <div
-                    key={fornecedor.id}
-                    className="bg-white rounded-lg shadow-sm p-4 hover:shadow-md transition-shadow"
+                  <div 
+                    key={fornecedor.id} 
+                    className={`bg-white rounded-lg shadow p-5 border-l-4 
+                      ${selectedFornecedores.includes(fornecedor.id) 
+                          ? "bg-blue-50 border-blue-500" 
+                          : "border-gray-200"
+                      }`}
                   >
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h3 className="text-lg font-medium">{fornecedor.nome}</h3>
-                        {fornecedor.cnpj && (
-                          <p className="text-sm text-gray-500">CNPJ: {fornecedor.cnpj}</p>
-                        )}
-                        {fornecedor.telefone && (
-                          <p className="text-sm text-gray-500">Telefone: {fornecedor.telefone}</p>
-                        )}
-                        {fornecedor.email && (
-                          <p className="text-sm text-gray-500">Email: {fornecedor.email}</p>
-                        )}
-                        {fornecedor.endereco && (
-                          <p className="text-sm text-gray-500">Endereço: {fornecedor.endereco}</p>
-                        )}
-                        {fornecedor.observacoes && (
-                          <p className="text-sm text-gray-500 mt-2">{fornecedor.observacoes}</p>
-                        )}
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center">
+                        {/* Checkbox de seleção */}
+                        <button
+                          onClick={() => handleSelectFornecedor(fornecedor.id)}
+                          className="text-blue-600 hover:text-blue-800 p-1 mr-2"
+                        >
+                          {selectedFornecedores.includes(fornecedor.id) ? (
+                            <FaCheckSquare className="text-blue-600 text-xl" />
+                          ) : (
+                            <FaSquare className="text-gray-400 text-xl" />
+                          )}
+                        </button>
+                      
+                        <h3 className="text-lg font-semibold text-gray-800">{fornecedor.nome}</h3>
                       </div>
-                      <div className="flex space-x-2">
+                      
+                      <div className="flex">
                         <button
                           onClick={() => openEditFornecedorModal(fornecedor)}
-                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-md"
+                          className="text-blue-600 hover:text-blue-800 p-1 mr-2"
+                          title="Editar"
                         >
                           <FaEdit />
                         </button>
                         <button
                           onClick={() => handleDeleteFornecedor(fornecedor.id)}
-                          className="p-2 text-red-600 hover:bg-red-50 rounded-md"
+                          className="text-red-600 hover:text-red-800 p-1"
+                          title="Excluir"
                         >
                           <FaTrash />
                         </button>
                       </div>
                     </div>
+                    
+                    {fornecedor.cnpj && (
+                      <p className="text-sm text-gray-600">CNPJ: {fornecedor.cnpj}</p>
+                    )}
+                    
+                    {fornecedor.telefone && (
+                      <p className="text-sm text-gray-600 mt-1">Tel: {fornecedor.telefone}</p>
+                    )}
+                    
+                    {fornecedor.email && (
+                      <p className="text-sm text-gray-600 mt-1">Email: {fornecedor.email}</p>
+                    )}
+                    
+                    {fornecedor.endereco && (
+                      <p className="text-sm text-gray-600 mt-1">Endereço: {fornecedor.endereco}</p>
+                    )}
                     
                     {/* Exibir número de materiais deste fornecedor */}
                     <div className="mt-4 pt-4 border-t border-gray-100">
@@ -607,19 +824,52 @@ const Fornecedores = () => {
         {/* Conteúdo da aba de Materiais */}
         {activeTab === 'materiais' && (
           <div>
-            <div className="flex justify-end mb-4 space-x-2">
-              <button
-                onClick={openUploadModal}
-                className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 flex items-center"
-              >
-                <FaCloudUploadAlt className="mr-2" /> Upload de Orçamento
-              </button>
-              <button
-                onClick={openCreateMaterialModal}
-                className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 flex items-center"
-              >
-                <FaPlus className="mr-2" /> Novo Material
-              </button>
+            <div className="flex flex-col sm:flex-row justify-between gap-2 mb-4">
+              <div className="flex space-x-2">
+                <button
+                  onClick={openUploadModal}
+                  className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 flex items-center"
+                >
+                  <FaCloudUploadAlt className="mr-2" /> Upload de Orçamento
+                </button>
+                <button
+                  onClick={openCreateMaterialModal}
+                  className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 flex items-center"
+                >
+                  <FaPlus className="mr-2" /> Novo Material
+                </button>
+              </div>
+              
+              {/* Ações para itens selecionados */}
+              <div className="flex space-x-2">
+                <button
+                  onClick={handleSelectAllMateriais}
+                  className="flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none"
+                  disabled={materiaisFiltrados.length === 0}
+                >
+                  {selectAllMateriais ? (
+                    <>
+                      <FaCheckSquare className="mr-2" /> Desmarcar Todos
+                    </>
+                  ) : (
+                    <>
+                      <FaSquare className="mr-2" /> Selecionar Todos
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={handleDeleteSelectedMateriais}
+                  className={`flex items-center justify-center px-4 py-2 border rounded-md shadow-sm text-sm font-medium focus:outline-none ${
+                    selectedMateriais.length > 0 
+                      ? 'text-white bg-red-600 hover:bg-red-700 border-red-500' 
+                      : 'text-gray-500 bg-gray-200 border-gray-300 cursor-not-allowed'
+                  }`}
+                  disabled={selectedMateriais.length === 0 || loading}
+                >
+                  <FaTrash className="mr-2" /> 
+                  Excluir Selecionados ({selectedMateriais.length})
+                </button>
+              </div>
             </div>
             
             {loading && materiais.length === 0 ? (
@@ -637,6 +887,18 @@ const Fornecedores = () => {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
+                      <th scope="col" className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <button
+                          onClick={handleSelectAllMateriais}
+                          className="text-blue-600 hover:text-blue-800 p-1"
+                        >
+                          {selectAllMateriais ? (
+                            <FaCheckSquare className="text-blue-600" />
+                          ) : (
+                            <FaSquare className="text-gray-400" />
+                          )}
+                        </button>
+                      </th>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Material
                       </th>
@@ -656,7 +918,20 @@ const Fornecedores = () => {
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {materiaisFiltrados.map(material => (
-                      <tr key={material.id}>
+                      <tr key={material.id} 
+                          className={selectedMateriais.includes(material.id) ? "bg-blue-50" : ""}>
+                        <td className="px-2 py-4 whitespace-nowrap">
+                          <button
+                            onClick={() => handleSelectMaterial(material.id)}
+                            className="text-blue-600 hover:text-blue-800 p-1"
+                          >
+                            {selectedMateriais.includes(material.id) ? (
+                              <FaCheckSquare className="text-blue-600 text-xl" />
+                            ) : (
+                              <FaSquare className="text-gray-400 text-xl" />
+                            )}
+                          </button>
+                        </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm font-medium text-gray-900">
                             {material.nome}
@@ -861,7 +1136,10 @@ const Fornecedores = () => {
                     name="fornecedor_id"
                     value={materialForm.fornecedor_id}
                     onChange={handleMaterialFormChange}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2"
+                    className={`w-full border rounded-md px-3 py-2 ${
+                      !materialForm.fornecedor_id ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                    }`}
+                    required
                   >
                     <option value="">Selecione um fornecedor</option>
                     {fornecedores.map(fornecedor => (
@@ -870,6 +1148,9 @@ const Fornecedores = () => {
                       </option>
                     ))}
                   </select>
+                  {!materialForm.fornecedor_id && (
+                    <p className="text-xs text-red-500 mt-1">A seleção de fornecedor é obrigatória</p>
+                  )}
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

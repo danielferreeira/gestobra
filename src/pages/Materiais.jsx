@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { FaPlus, FaSearch, FaEdit, FaTrash, FaEye, FaBoxes, FaCloudUploadAlt } from 'react-icons/fa';
+import { FaPlus, FaSearch, FaEdit, FaTrash, FaEye, FaBoxes, FaCloudUploadAlt, FaCheck, FaCheckSquare, FaSquare } from 'react-icons/fa';
 import { getMateriais, createMaterial, updateMaterial, deleteMaterial } from '../services/materiaisService';
 import UploadOrcamento from '../components/UploadOrcamento';
 
@@ -11,6 +11,8 @@ const Materiais = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [modalTab, setModalTab] = useState('manual'); // 'manual' ou 'upload'
+  const [selectedItems, setSelectedItems] = useState([]);
+  const [selectAll, setSelectAll] = useState(false);
   const [formData, setFormData] = useState({
     nome: '',
     categoria: '',
@@ -50,6 +52,12 @@ const Materiais = () => {
     material.categoria.toLowerCase().includes(searchTerm.toLowerCase()) ||
     material.fornecedor?.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  // Reset da seleção quando a lista de materiais filtrados muda
+  useEffect(() => {
+    setSelectedItems([]);
+    setSelectAll(false);
+  }, [searchTerm]);
 
   // Formatar valores monetários
   const formatCurrency = (value) => {
@@ -171,6 +179,72 @@ const Materiais = () => {
     }
   };
 
+  // Excluir materiais selecionados
+  const handleDeleteSelected = async () => {
+    if (selectedItems.length === 0) {
+      alert('Nenhum material selecionado para exclusão');
+      return;
+    }
+
+    if (window.confirm(`Tem certeza que deseja excluir ${selectedItems.length} materiais selecionados?`)) {
+      try {
+        setLoading(true);
+        
+        // Manter track de erros
+        const errors = [];
+        
+        // Excluir cada material selecionado
+        for (const id of selectedItems) {
+          const { error } = await deleteMaterial(id);
+          if (error) {
+            errors.push({ id, message: error.message });
+          }
+        }
+        
+        // Se houver erros, mostrar mensagem
+        if (errors.length > 0) {
+          console.error('Erros ao excluir materiais:', errors);
+          setError(`Ocorreram erros ao excluir ${errors.length} materiais`);
+        }
+        
+        // Atualizar lista de materiais
+        const { data: updatedMateriais } = await getMateriais();
+        setMateriais(updatedMateriais || []);
+        
+        // Limpar seleção
+        setSelectedItems([]);
+        setSelectAll(false);
+        
+        setLoading(false);
+      } catch (error) {
+        console.error('Erro ao excluir materiais:', error);
+        setError(error.message || 'Erro ao excluir materiais');
+        setLoading(false);
+      }
+    }
+  };
+
+  // Manipular seleção de material
+  const handleSelect = (id) => {
+    setSelectedItems(prev => {
+      if (prev.includes(id)) {
+        return prev.filter(item => item !== id);
+      } else {
+        return [...prev, id];
+      }
+    });
+  };
+
+  // Manipular seleção de todos os materiais
+  const handleSelectAll = () => {
+    if (selectAll) {
+      setSelectedItems([]);
+    } else {
+      setSelectedItems(filteredMateriais.map(material => material.id));
+    }
+    setSelectAll(!selectAll);
+  };
+
   // Manipular resultado do upload de orçamento
   const handleUploadSuccess = async (resultado) => {
     try {
@@ -237,18 +311,51 @@ const Materiais = () => {
         </div>
       </div>
 
-      {/* Barra de pesquisa */}
-      <div className="relative">
-        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-          <FaSearch className="text-gray-400" />
+      {/* Barra de pesquisa e ações em massa */}
+      <div className="flex flex-col sm:flex-row justify-between gap-2">
+        <div className="relative w-full sm:w-2/3">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <FaSearch className="text-gray-400" />
+          </div>
+          <input
+            type="text"
+            className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+            placeholder="Buscar materiais por nome, categoria ou fornecedor..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
         </div>
-        <input
-          type="text"
-          className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-          placeholder="Buscar materiais por nome, categoria ou fornecedor..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-        />
+        
+        {/* Ações para itens selecionados */}
+        <div className="flex space-x-2">
+          <button
+            onClick={handleSelectAll}
+            className="flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none"
+            disabled={filteredMateriais.length === 0}
+          >
+            {selectAll ? (
+              <>
+                <FaCheckSquare className="mr-2" /> Desmarcar Todos
+              </>
+            ) : (
+              <>
+                <FaSquare className="mr-2" /> Selecionar Todos
+              </>
+            )}
+          </button>
+          <button
+            onClick={handleDeleteSelected}
+            className={`flex items-center justify-center px-4 py-2 border rounded-md shadow-sm text-sm font-medium focus:outline-none ${
+              selectedItems.length > 0 
+                ? 'text-white bg-red-600 hover:bg-red-700 border-red-500' 
+                : 'text-gray-500 bg-gray-200 border-gray-300 cursor-not-allowed'
+            }`}
+            disabled={selectedItems.length === 0 || loading}
+          >
+            <FaTrash className="mr-2" /> 
+            Excluir Selecionados ({selectedItems.length})
+          </button>
+        </div>
       </div>
 
       {/* Lista de Materiais */}
@@ -256,10 +363,26 @@ const Materiais = () => {
         <ul className="divide-y divide-gray-200">
           {filteredMateriais.length > 0 ? (
             filteredMateriais.map((material) => (
-              <li key={material.id}>
+              <li key={material.id} className={
+                selectedItems.includes(material.id) ? "bg-blue-50" : ""
+              }>
                 <div className="px-4 py-4 sm:px-6">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center">
+                      {/* Checkbox de seleção */}
+                      <div className="flex-shrink-0 mr-2">
+                        <button
+                          onClick={() => handleSelect(material.id)}
+                          className="text-blue-600 hover:text-blue-800 p-1"
+                        >
+                          {selectedItems.includes(material.id) ? (
+                            <FaCheckSquare className="text-blue-600 text-xl" />
+                          ) : (
+                            <FaSquare className="text-gray-400 text-xl" />
+                          )}
+                        </button>
+                      </div>
+
                       <div className="flex-shrink-0">
                         <div className={`bg-${isEstoqueBaixo(material) ? 'red' : 'blue'}-100 p-2 rounded-full`}>
                           <FaBoxes className={`text-${isEstoqueBaixo(material) ? 'red' : 'blue'}-600`} />

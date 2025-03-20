@@ -15,7 +15,6 @@ const UploadOrcamento = ({ onSuccess, etapaId = null, obraId = null }) => {
   });
   const [fornecedores, setFornecedores] = useState([]);
   const [fornecedorSelecionado, setFornecedorSelecionado] = useState(null);
-  const [usarFornecedorDoArquivo, setUsarFornecedorDoArquivo] = useState(true);
 
   // Carregar lista de fornecedores
   useEffect(() => {
@@ -58,6 +57,11 @@ const UploadOrcamento = ({ onSuccess, etapaId = null, obraId = null }) => {
       return;
     }
 
+    if (!fornecedorSelecionado) {
+      setError('Selecione um fornecedor para continuar');
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
@@ -93,50 +97,30 @@ const UploadOrcamento = ({ onSuccess, etapaId = null, obraId = null }) => {
         progress: 30
       });
 
-      const { fornecedor, itens } = resultado.data;
+      const { itens } = resultado.data;
       console.log('Dados extraídos do orçamento:',
-        'Fornecedor:', fornecedor,
         'Itens:', itens.length
       );
 
-      setProcessedData(resultado.data);
+      // Armazenar os itens processados
+      setProcessedData({
+        itens: itens,
+        fornecedor: fornecedores.find(f => f.id === fornecedorSelecionado)
+      });
       
-      // 2. Processar fornecedor
-      let fornecedorId;
-      
-      if (usarFornecedorDoArquivo) {
-        setProcessStatus({
-          step: 'fornecedor',
-          message: 'Processando dados do fornecedor...',
-          progress: 50
-        });
-
-        const fornecedorResult = await adicionarFornecedorFromOrcamento(fornecedor);
-        console.log('Resultado do processamento do fornecedor:', fornecedorResult);
-        
-        if (!fornecedorResult.success) {
-          throw new Error(fornecedorResult.message || 'Erro ao processar fornecedor');
-        }
-
-        fornecedorId = fornecedorResult.data.id;
-        console.log('Fornecedor processado com ID:', fornecedorId);
-      } else if (fornecedorSelecionado) {
-        // Usar o fornecedor selecionado manualmente
-        fornecedorId = fornecedorSelecionado;
-        console.log('Usando fornecedor selecionado com ID:', fornecedorId);
-        setProcessStatus({
-          step: 'fornecedor',
-          message: 'Usando fornecedor selecionado...',
-          progress: 50
-        });
-      } else {
-        throw new Error('Selecione um fornecedor ou use o do arquivo');
-      }
+      // Usar o fornecedor selecionado manualmente
+      const fornecedorId = fornecedorSelecionado;
+      console.log('Usando fornecedor selecionado com ID:', fornecedorId);
+      setProcessStatus({
+        step: 'fornecedor',
+        message: 'Usando fornecedor selecionado...',
+        progress: 50
+      });
 
       // 3. Processar materiais
       setProcessStatus({
         step: 'materiais',
-        message: 'Processando materiais...',
+        message: 'Processando materiais (verificando duplicatas)...',
         progress: 70
       });
 
@@ -155,10 +139,7 @@ const UploadOrcamento = ({ onSuccess, etapaId = null, obraId = null }) => {
       if (onSuccess) {
         console.log('Enviando dados processados para o componente pai');
         onSuccess({
-          fornecedor: {
-            ...fornecedor,
-            id: fornecedorId
-          },
+          fornecedor: fornecedores.find(f => f.id === fornecedorId),
           materiais: materiaisResult.data,
           erros: materiaisResult.erros,
           etapaId,
@@ -184,14 +165,33 @@ const UploadOrcamento = ({ onSuccess, etapaId = null, obraId = null }) => {
   // Renderiza o conteúdo do componente com base no status
   const renderContent = () => {
     if (processStatus.step === 'success') {
+      // Contagem de itens novos vs. atualizados
+      const novosItens = processedData?.materiais?.filter(m => m.status === 'novo')?.length || 0;
+      const atualizadosItens = processedData?.materiais?.filter(m => m.status === 'atualizado')?.length || 0;
+      
       return (
         <div className="flex flex-col items-center p-6 bg-green-50 rounded-lg border border-green-200">
           <FaCheck className="text-3xl text-green-500 mb-2" />
           <h3 className="text-lg font-semibold text-green-700 mb-1">Processamento concluído!</h3>
-          <p className="text-sm text-green-600 mb-4">{processStatus.message}</p>
+          <p className="text-sm text-green-600 mb-2">{processStatus.message}</p>
+          
+          {/* Resumo do processamento */}
+          <div className="bg-white p-3 rounded border border-green-200 mb-4 w-full">
+            <p className="text-sm text-gray-700">
+              <span className="font-medium">Resumo:</span>{' '}
+              {novosItens > 0 && <span className="text-green-600">{novosItens} materiais novos adicionados. </span>}
+              {atualizadosItens > 0 && <span className="text-blue-600">{atualizadosItens} materiais existentes atualizados. </span>}
+              {processedData?.erros?.length > 0 && 
+                <span className="text-red-600">{processedData.erros.length} materiais com erro. </span>
+              }
+            </p>
+            <p className="text-xs text-gray-500 mt-1">
+              O sistema evitou duplicatas utilizando verificação inteligente de nomes similares.
+            </p>
+          </div>
           
           <div className="w-full mt-2">
-            <h4 className="font-medium text-green-800 mb-1">Fornecedor processado:</h4>
+            <h4 className="font-medium text-green-800 mb-1">Fornecedor:</h4>
             <div className="bg-white p-3 rounded border border-green-200 mb-3">
               <p className="text-sm">{processedData.fornecedor.nome}</p>
               <p className="text-xs text-gray-500">CNPJ: {processedData.fornecedor.cnpj}</p>
@@ -285,40 +285,29 @@ const UploadOrcamento = ({ onSuccess, etapaId = null, obraId = null }) => {
           </div>
         )}
         
-        {/* Opção para selecionar fornecedor ou usar o do arquivo */}
+        {/* Seleção de fornecedor (agora obrigatória) */}
         <div className="w-full mb-4">
-          <div className="flex items-center mb-2">
-            <input
-              type="checkbox"
-              id="usarFornecedorArquivo"
-              checked={usarFornecedorDoArquivo}
-              onChange={(e) => setUsarFornecedorDoArquivo(e.target.checked)}
-              className="mr-2"
-            />
-            <label htmlFor="usarFornecedorArquivo" className="text-sm text-blue-700">
-              Usar fornecedor do arquivo
-            </label>
-          </div>
-          
-          {!usarFornecedorDoArquivo && (
-            <div className="mt-2">
-              <label className="block text-sm text-blue-700 mb-1">
-                Selecione um fornecedor:
-              </label>
-              <select
-                value={fornecedorSelecionado || ''}
-                onChange={(e) => setFornecedorSelecionado(e.target.value)}
-                className="w-full p-2 border border-blue-200 rounded text-sm"
-                disabled={loading || usarFornecedorDoArquivo}
-              >
-                <option value="">Selecione um fornecedor</option>
-                {fornecedores.map(fornecedor => (
-                  <option key={fornecedor.id} value={fornecedor.id}>
-                    {fornecedor.nome} {fornecedor.cnpj ? `(${fornecedor.cnpj})` : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
+          <label className="block text-sm text-blue-700 mb-1 font-medium">
+            Selecione um fornecedor: <span className="text-red-500">*</span>
+          </label>
+          <select
+            value={fornecedorSelecionado || ''}
+            onChange={(e) => setFornecedorSelecionado(e.target.value)}
+            className={`w-full p-2 border rounded text-sm ${!fornecedorSelecionado && file ? 'border-red-300 bg-red-50' : 'border-blue-200'}`}
+            disabled={loading}
+            required
+          >
+            <option value="">Selecione um fornecedor</option>
+            {fornecedores.map(fornecedor => (
+              <option key={fornecedor.id} value={fornecedor.id}>
+                {fornecedor.nome} {fornecedor.cnpj ? `(${fornecedor.cnpj})` : ''}
+              </option>
+            ))}
+          </select>
+          {!fornecedorSelecionado && file && (
+            <p className="text-xs text-red-600 mt-1">
+              É obrigatório selecionar um fornecedor para processar o orçamento.
+            </p>
           )}
         </div>
         
@@ -339,9 +328,9 @@ const UploadOrcamento = ({ onSuccess, etapaId = null, obraId = null }) => {
         
         <button
           onClick={handleProcessarOrcamento}
-          disabled={loading || !file || (!usarFornecedorDoArquivo && !fornecedorSelecionado)}
+          disabled={loading || !file || !fornecedorSelecionado}
           className={`w-full py-2 px-4 rounded-md flex items-center justify-center ${
-            loading || !file || (!usarFornecedorDoArquivo && !fornecedorSelecionado)
+            loading || !file || !fornecedorSelecionado
               ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
               : 'bg-blue-600 text-white hover:bg-blue-700'
           }`}

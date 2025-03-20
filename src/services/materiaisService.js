@@ -321,77 +321,71 @@ const dadosPadraoImagem = [
   { item: 11, codigo: '2263', descricao: 'TUBO PVC ESGOTO 75 PLASTILIT', unidade: 'MT', quantidade: 1, valorUnitario: 7.89, valorTotal: 7.89 }
 ];
 
-// Função para simular a extração de dados do arquivo
-// Em uma implementação real, esta seria substituída por OCR ou outro método
+// Simulação de processamento de arquivo para testes
 function simulateFileProcessing(file) {
-  return new Promise(async (resolve, reject) => {
-    try {
-      console.log('Iniciando processamento do arquivo:', file.name, 'tipo:', file.type);
+  return new Promise((resolve) => {
+    // Simulação de processamento de arquivo
+    setTimeout(async () => {
+      // Extrair nome do fornecedor do nome do arquivo
+      const fileName = file.name;
+      console.log('Processando arquivo:', fileName);
       
-      // Verificar o tipo de arquivo para decidir como processá-lo
-      const isImage = file.type.includes('image');
-      let extractedText = '';
-      let processedData = null;
+      // Obter o usuário atual
+      const { data: { user } } = await supabase.auth.getUser();
       
-      if (isImage) {
-        // Processar imagem com OCR ou usar dados pré-definidos
-        console.log('Arquivo de imagem detectado, iniciando OCR...');
-        try {
-          extractedText = await processImageWithOCR(file);
-          // Analisar o texto extraído para buscar informações
-          processedData = analyzeExtractedText(extractedText, file.name);
-          
-          // Se não encontrou itens com OCR, usar dados pré-definidos
-          if (processedData.itens.length === 0) {
-            console.log('OCR não conseguiu identificar itens, usando dados pré-definidos');
-            processedData = processarDadosPadrao(file.name);
-          }
-        } catch (ocrError) {
-          console.error('Erro no OCR, usando dados pré-definidos:', ocrError);
-          processedData = processarDadosPadrao(file.name);
-        }
-      } else {
-        // Processar texto, PDF ou outros arquivos
-        extractedText = await extractTextFromFile(file);
-        // Analisar o texto extraído para buscar informações
-        processedData = analyzeExtractedText(extractedText, file.name);
+      if (!user) {
+        throw new Error('Usuário não autenticado');
       }
       
-      console.log(`Extração concluída. Encontrados ${processedData.itens.length} itens.`);
+      // Processar dados
+      const result = processarDadosPadrao(fileName, user.id);
       
-      resolve(processedData);
-    } catch (error) {
-      console.error('Erro no processamento do arquivo:', error);
-      // Retornar dados mínimos para não quebrar o fluxo
-      resolve({
-        fornecedor: {
-          cnpj: '00.000.000/0001-00',
-          nome: 'Fornecedor do Arquivo',
-          telefone: '',
-          email: ''
-        },
-        itens: []
-      });
-    }
+      // Retornar os dados simulados
+      resolve(result);
+    }, 1500);
   });
 }
 
 // Função para processar dados pré-definidos quando OCR falha
-function processarDadosPadrao(fileName) {
+function processarDadosPadrao(fileName, userId) {
   console.log('Usando dados pré-definidos para o orçamento');
   
-  // Transformar dados padrão no formato esperado
-  const itens = dadosPadraoImagem.map(item => ({
-    descricao: `${item.codigo} ${item.descricao}`,
-    quantidade: item.quantidade,
-    unidade: item.unidade,
-    valor_unitario: item.valorUnitario
-  }));
+  // Gerar alguns itens de teste baseados no nome do arquivo
+  const itens = [];
+  
+  // Determinar tipo de materiais baseado no nome do arquivo
+  const lowerFileName = fileName.toLowerCase();
+  
+  if (lowerFileName.includes('hidrau') || lowerFileName.includes('agua')) {
+    // Materiais hidráulicos
+    itens.push(...itensPadraoHidraulica);
+  } else if (lowerFileName.includes('eletric')) {
+    // Materiais elétricos
+    itens.push(...itensPadraoEletrica);
+  } else if (lowerFileName.includes('pintur')) {
+    // Materiais para pintura
+    itens.push(...itensPadraoAlvenaria);
+  } else {
+    // Materiais diversos
+    itens.push(...itensPadraoDiversos);
+  }
+  
+  // Extrair nome do fornecedor do nome do arquivo
+  let nomeFornecedor = fileName.split('.')[0].replace(/_/g, ' ') || 'Fornecedor do Arquivo';
+  
+  // Verificar se o nome do arquivo tem alguma informação de fornecedor
+  if (lowerFileName.includes('leroy')) {
+    nomeFornecedor = 'Leroy Merlin';
+  } else if (lowerFileName.includes('telha')) {
+    nomeFornecedor = 'Telhanorte';
+  } else if (lowerFileName.includes('c&c')) {
+    nomeFornecedor = 'C&C';
+  }
   
   return {
     fornecedor: {
       cnpj: '00.000.000/0001-00',
-      nome: fileName.split('.')[0].replace(/_/g, ' ') || 'Produtos',
+      nome: nomeFornecedor || 'Produtos',
       telefone: '',
       email: ''
     },
@@ -812,110 +806,358 @@ function analyzeExtractedText(text, fileName) {
   };
 }
 
-// Função para processar arquivo de orçamento com vinculação automática ao fornecedor
-export const processarArquivoOrcamento = async (file, fornecedorId = null) => {
+// Processar arquivo de orçamento (PDF, imagem, etc.)
+export const processarArquivoOrcamento = async (file) => {
   try {
-    console.log("Iniciando processamento do arquivo de orçamento");
+    // Obter nome do arquivo
+    const fileName = file.name;
+    const fileExtension = fileName.split('.').pop().toLowerCase();
     
-    // Forçar o uso do bucket "arquivos" diretamente
-    const bucketToUse = 'arquivos';
-    console.log(`Usando diretamente o bucket '${bucketToUse}'`);
+    // Obter usuário atual
+    const { data: { user } } = await supabase.auth.getUser();
     
-    // Enviar o arquivo para o servidor através da Storage do Supabase
-    const timestamp = Date.now();
-    
-    // Simplificar ainda mais o nome do arquivo (sem subpastas)
-    const fileName = `orcamento_${timestamp}.${file.name.split('.').pop()}`;
-    
-    console.log(`Enviando arquivo para o bucket '${bucketToUse}':`, fileName);
-    
-    // Tentar o upload com mais informações de diagnóstico
-    console.log('Iniciando upload do arquivo...');
-    const { data: uploadData, error: uploadError } = await supabase
-      .storage
-      .from(bucketToUse)
-      .upload(fileName, file, {
-        cacheControl: '3600',
-        upsert: true
-      });
-    
-    if (uploadError) {
-      console.error(`Erro detalhado ao fazer upload:`, uploadError);
-      
-      return { 
-        success: false, 
-        error: uploadError,
-        message: `Erro ao fazer upload do arquivo: ${uploadError.message}`
-      };
+    if (!user) {
+      throw new Error('Usuário não autenticado');
     }
     
-    console.log('Upload concluído com sucesso:', uploadData);
+    console.log('Processando arquivo:', fileName, 'Extensão:', fileExtension);
     
-    // Obter URL pública do arquivo
-    const { data: urlData } = await supabase
-      .storage
-      .from(bucketToUse)
-      .getPublicUrl(fileName);
-    
-    const fileUrl = urlData.publicUrl;
-    console.log('URL pública do arquivo:', fileUrl);
-    
-    // Processar o arquivo para extrair dados
-    console.log('Extraindo dados do arquivo...');
-    const processedData = await simulateFileProcessing(file);
-    
-    console.log('Dados extraídos do arquivo:', processedData);
-    
-    // Se temos fornecedor nos dados e não foi passado um ID, cadastrar/buscar o fornecedor
-    let fornecedorIdFinal = fornecedorId;
-    
-    if (!fornecedorIdFinal && processedData.fornecedor) {
-      console.log('Buscando/cadastrando fornecedor:', processedData.fornecedor.nome);
-      
-      const resultadoFornecedor = await adicionarFornecedorFromOrcamento(processedData.fornecedor);
-      
-      if (resultadoFornecedor.success && resultadoFornecedor.data) {
-        fornecedorIdFinal = resultadoFornecedor.data.id;
-        console.log('Fornecedor vinculado com ID:', fornecedorIdFinal);
-      } else {
-        console.error('Erro ao cadastrar fornecedor:', resultadoFornecedor.error);
+    // Para PDFs e imagens, tentar usar OCR
+    if (['jpg', 'jpeg', 'png', 'pdf'].includes(fileExtension)) {
+      try {
+        // Fazer upload temporário para o storage
+        const storageRef = `uploads/${user.id}/${Date.now()}_${fileName}`;
+        
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('arquivos')
+          .upload(storageRef, file, {
+            cacheControl: '3600',
+            upsert: false
+          });
+          
+        if (uploadError) {
+          console.error('Erro no upload do arquivo:', uploadError);
+          throw uploadError;
+        }
+        
+        // Obter URL pública do arquivo
+        const { data: urlData } = await supabase.storage
+          .from('arquivos')
+          .getPublicUrl(storageRef);
+          
+        const fileUrl = urlData.publicUrl;
+        
+        // Para PDFs, usar um endpoint de processamento de PDF (a ser implementado)
+        if (fileExtension === 'pdf') {
+          // TODO: Implementar processamento de PDF
+          // Por enquanto, usar dados padrão para teste
+          return processarDadosPadrao(fileName, user.id);
+        }
+        
+        // Para imagens, usar OCR
+        try {
+          console.log('Iniciando OCR para imagem:', fileUrl);
+          
+          const { data: { text } } = await Tesseract.recognize(
+            fileUrl,
+            'por', // Língua portuguesa
+            { 
+              logger: message => {
+                if (message.status === 'recognizing text') {
+                  console.log(`OCR progresso: ${message.progress * 100}%`);
+                }
+              }
+            }
+          );
+          
+          console.log('OCR concluído. Texto extraído:', text.substring(0, 100) + '...');
+          
+          // Processar o texto do OCR
+          return processarTextoOCR(text, fileName, user.id);
+        } catch (ocrError) {
+          console.error('Erro no processamento OCR:', ocrError);
+          // Se falhar o OCR, usar dados padrão para teste
+          return processarDadosPadrao(fileName, user.id);
+        }
+      } catch (err) {
+        console.error('Erro ao processar imagem/PDF:', err);
+        throw err;
       }
+    } else {
+      // Para outros formatos, usar dados padrão para teste
+      return processarDadosPadrao(fileName, user.id);
     }
-    
-    // Cadastrar materiais automaticamente se temos o fornecedor
-    let resultadoMateriais = null;
-    
-    if (fornecedorIdFinal && processedData.itens && processedData.itens.length > 0) {
-      console.log(`Cadastrando ${processedData.itens.length} materiais para o fornecedor ${fornecedorIdFinal}...`);
-      
-      resultadoMateriais = await adicionarMateriaisFromOrcamento(
-        processedData.itens, 
-        fornecedorIdFinal
-      );
-      
-      console.log('Resultado do cadastro de materiais:', 
-        resultadoMateriais.success ? 'Sucesso' : 'Falha',
-        resultadoMateriais.message);
-    }
-    
-    return {
-      success: true,
-      data: {
-        fornecedor: processedData.fornecedor,
-        fornecedor_id: fornecedorIdFinal,
-        itens: processedData.itens,
-        arquivo_url: fileUrl,
-        resultado_materiais: resultadoMateriais
-      },
-      message: 'Arquivo processado com sucesso'
-    };
-    
   } catch (error) {
     console.error('Erro ao processar arquivo de orçamento:', error);
     return {
       success: false,
       error,
-      message: 'Erro ao processar o arquivo de orçamento.'
+      message: error.message || 'Erro ao processar o arquivo'
+    };
+  }
+};
+
+// Processar texto extraído por OCR
+const processarTextoOCR = (text, fileName, userId) => {
+  try {
+    console.log('Processando texto extraído por OCR');
+    console.log('Texto completo:', text);
+    
+    // Quebrar o texto em linhas
+    const linhas = text.split('\n').filter(linha => linha.trim() !== '');
+    console.log(`Total de linhas após filtragem: ${linhas.length}`);
+    
+    // Extrair itens/materiais do orçamento
+    const itens = [];
+    
+    // Expressões regulares para identificar elementos de um item
+    const regexCodigo = /^(\d{3,})|\b(\d{3,})\b/; // Código com 3+ dígitos no início da linha ou separado
+    const regexValor = /R\$\s*(\d+[,.]\d+)/i; // Valores monetários (R$ 123,45)
+    const regexValorSemRS = /(\d+[,.]\d+)/; // Valores numéricos com vírgula/ponto
+    const regexUnidade = /\b(un|m|mt|kg|m2|m3|m²|m³|pç|pc|cx|lt|l|conj)\b/i; // Unidades comuns
+    const regexQuantidade = /(\d+([,.]\d+)?)\s*(un|m|mt|kg|m2|m3|m²|m³|pç|pc|cx|lt|l|conj)\b/i; // Quantidade + unidade
+    
+    // Identificar possíveis cabeçalhos ou linhas de tabela
+    let tabelaEncontrada = false;
+    let inicioTabela = 0;
+    
+    for (let i = 0; i < linhas.length; i++) {
+      const linha = linhas[i].toLowerCase();
+      if (linha.includes('código') && linha.includes('descrição') && 
+          (linha.includes('un') || linha.includes('qtd') || linha.includes('valor'))) {
+        tabelaEncontrada = true;
+        inicioTabela = i + 1;
+        console.log(`Tabela de materiais identificada na linha ${i}`);
+        break;
+      }
+    }
+    
+    // Processar as linhas, dando preferência às linhas da tabela se encontrada
+    const linhasProcessar = tabelaEncontrada ? 
+      linhas.slice(inicioTabela) : 
+      linhas;
+    
+    console.log(`Processando ${linhasProcessar.length} linhas${tabelaEncontrada ? ' da tabela identificada' : ''}`);
+    
+    // Percorrer todas as linhas
+    for (let i = 0; i < linhasProcessar.length; i++) {
+      let linha = linhasProcessar[i].trim();
+      console.log(`Analisando linha ${i}: ${linha}`);
+      
+      // Ignorar linhas muito curtas, cabeçalhos ou rodapés
+      if (linha.length < 5 || 
+          /total|subtotal|orçamento|descrição|produto|valor|quant|unit|página|pag\.|tel|fone|cnpj|cont[aá]to|e-?mail/i.test(linha)) {
+        console.log('  Linha ignorada: muito curta ou cabeçalho/rodapé');
+        continue;
+      }
+      
+      try {
+        // Valores padrão
+        let descricao = linha;
+        let valor_unitario = 0;
+        let quantidade = 1;
+        let unidade = 'un';
+        let codigoProduto = '';
+        
+        // Tentar extrair código de produto
+        const codigoMatch = linha.match(regexCodigo);
+        if (codigoMatch) {
+          codigoProduto = codigoMatch[1] || codigoMatch[2];
+          console.log(`  Código encontrado: ${codigoProduto}`);
+        }
+        
+        // Tentar extrair valor
+        const valorMatchRS = linha.match(regexValor);
+        if (valorMatchRS) {
+          valor_unitario = parseFloat(valorMatchRS[1].replace(',', '.'));
+          // Remover o valor da descrição
+          descricao = descricao.replace(valorMatchRS[0], '').trim();
+          console.log(`  Valor encontrado: R$ ${valor_unitario}`);
+        } else {
+          // Tentar encontrar qualquer número com vírgula/ponto que possa ser um valor
+          const valorMatches = [...linha.matchAll(regexValorSemRS)];
+          // Se há pelo menos 2 valores, o último geralmente é o preço
+          if (valorMatches.length >= 2) {
+            const ultimoValor = valorMatches[valorMatches.length - 1];
+            const possibleValue = parseFloat(ultimoValor[1].replace(',', '.'));
+            // Verificar se parece um valor monetário adequado (geralmente > 1)
+            if (possibleValue >= 1) {
+              valor_unitario = possibleValue;
+              console.log(`  Possível valor encontrado: ${valor_unitario}`);
+              // Remover o valor da descrição - com cuidado para não remover outras ocorrências do número
+              const parteAntes = descricao.substring(0, ultimoValor.index);
+              const parteDepois = descricao.substring(ultimoValor.index + ultimoValor[0].length);
+              descricao = (parteAntes + parteDepois).trim();
+            }
+          }
+        }
+        
+        // Tentar extrair quantidade e unidade
+        const quantidadeMatch = linha.match(regexQuantidade);
+        if (quantidadeMatch) {
+          quantidade = parseFloat(quantidadeMatch[1].replace(',', '.'));
+          unidade = quantidadeMatch[3].toLowerCase();
+          
+          // Normalizar unidades
+          if (unidade === 'm2' || unidade === 'm²') unidade = 'm²';
+          if (unidade === 'm3' || unidade === 'm³') unidade = 'm³';
+          if (unidade === 'pc' || unidade === 'pç') unidade = 'pç';
+          if (unidade === 'l' || unidade === 'lt') unidade = 'l';
+          if (unidade === 'mt') unidade = 'm';
+          
+          console.log(`  Quantidade encontrada: ${quantidade} ${unidade}`);
+          
+          // Remover quantidade/unidade da descrição - com cuidado
+          descricao = descricao.replace(quantidadeMatch[0], '').trim();
+        } else {
+          // Tentar encontrar apenas a unidade
+          const unidadeMatch = linha.match(regexUnidade);
+          if (unidadeMatch) {
+            unidade = unidadeMatch[1].toLowerCase();
+            // Normalizar unidades
+            if (unidade === 'm2' || unidade === 'm²') unidade = 'm²';
+            if (unidade === 'm3' || unidade === 'm³') unidade = 'm³';
+            if (unidade === 'pc' || unidade === 'pç') unidade = 'pç';
+            if (unidade === 'l' || unidade === 'lt') unidade = 'l';
+            if (unidade === 'mt') unidade = 'm';
+            
+            console.log(`  Unidade encontrada: ${unidade}`);
+          }
+        }
+        
+        // Limpar e melhorar descrição
+        descricao = descricao
+          .replace(/^\d+\s*[-–.]\s*/, '') // Remover números iniciais com traço/ponto
+          .replace(/\s{2,}/g, ' ') // Remover múltiplos espaços
+          .replace(/^\W+|\W+$/g, '') // Remover caracteres não-palavra do início/fim
+          .trim();
+        
+        // Adicionar código à descrição se não estiver incluído
+        if (codigoProduto && !descricao.includes(codigoProduto)) {
+          descricao = `${codigoProduto} - ${descricao}`;
+        }
+        
+        console.log(`  Descrição limpa: "${descricao}"`);
+        
+        // Verificar se a linha seguinte pode complementar a descrição
+        if (i < linhasProcessar.length - 1) {
+          const proximaLinha = linhasProcessar[i + 1].trim();
+          
+          // Se a próxima linha não tem valores nem unidades, pode ser continuação da descrição
+          if (proximaLinha.length > 3 && 
+              !regexValor.test(proximaLinha) && 
+              !regexQuantidade.test(proximaLinha) && 
+              !regexCodigo.test(proximaLinha)) {
+            
+            descricao = `${descricao} ${proximaLinha}`.trim();
+            i++; // Pular a próxima linha
+            console.log(`  Descrição complementada: "${descricao}"`);
+          }
+        }
+        
+        // Filtrar descrições muito ruins
+        if (descricao.length < 5 || descricao.split(' ').length < 2) {
+          console.log('  Item ignorado: descrição muito curta ou pouco significativa');
+          continue;
+        }
+        
+        // Remover descrições que são apenas números ou caracteres especiais
+        if (/^\d+$/.test(descricao) || !/[a-zA-Z]/.test(descricao)) {
+          console.log('  Item ignorado: descrição sem texto significativo');
+          continue;
+        }
+        
+        // Verificar se há um valor mínimo de informações para considerar como item válido
+        if (descricao.length >= 5) {
+          // Se não temos valor, mas temos descrição significativa, usar valor simbólico
+          if (valor_unitario <= 0) {
+            valor_unitario = 0.01; // Valor simbólico
+            console.log('  Valor não encontrado, usando valor simbólico 0.01');
+          }
+          
+          // Item válido encontrado
+          itens.push({
+            descricao,
+            valor_unitario,
+            quantidade,
+            unidade
+          });
+          console.log('  Item adicionado!');
+        } else {
+          console.log('  Item ignorado: informações insuficientes');
+        }
+      } catch (e) {
+        console.error('Erro ao processar linha:', linha, e);
+        // Continuar com próxima linha
+      }
+    }
+    
+    // Pós-processamento: remover duplicatas
+    const itensFiltrados = [];
+    const descricoes = new Set();
+    
+    for (const item of itens) {
+      // Normalizar descrição para comparação
+      const descNormalizada = item.descricao.toLowerCase().replace(/\s+/g, ' ').trim();
+      
+      // Se a descrição já existe, pular
+      if (descricoes.has(descNormalizada)) {
+        console.log(`Item duplicado ignorado: "${item.descricao}"`);
+        continue;
+      }
+      
+      // Adicionar à lista de itens filtrados
+      descricoes.add(descNormalizada);
+      itensFiltrados.push(item);
+    }
+    
+    console.log(`Encontrados ${itens.length} itens, ${itensFiltrados.length} após remoção de duplicatas`);
+    
+    // Se não encontrou itens, tentar uma abordagem mais simples
+    if (itensFiltrados.length === 0) {
+      console.log('Nenhum item encontrado com o parser principal, tentando processamento de emergência');
+      
+      // Percorrer todas as linhas buscando possíveis materiais
+      for (const linha of linhas) {
+        // Se a linha tem pelo menos 10 caracteres e não parece ser cabeçalho/rodapé
+        if (linha.length >= 10 && 
+            !/total|subtotal|orçamento|página|pag\.|tel|fone|cnpj|cont[aá]to|e-?mail/i.test(linha) &&
+            /[a-zA-Z]/.test(linha)) {
+          
+          // Limpar e normalizar a linha
+          const descricao = linha
+            .replace(/\s{2,}/g, ' ')
+            .replace(/^\W+|\W+$/g, '')
+            .trim();
+          
+          // Verificar se é significativa
+          if (descricao.length >= 10 && descricao.split(' ').length >= 2) {
+            console.log(`Adicionando material através do processamento de emergência: "${descricao}"`);
+            
+            itensFiltrados.push({
+              descricao,
+              valor_unitario: 0.01,
+              quantidade: 1,
+              unidade: 'un'
+            });
+          }
+        }
+      }
+    }
+    
+    // Retornar resultado
+    return {
+      success: true,
+      data: {
+        itens: itensFiltrados
+      }
+    };
+  } catch (error) {
+    console.error('Erro ao processar texto OCR:', error);
+    return {
+      success: false,
+      error,
+      message: 'Erro ao processar texto do OCR'
     };
   }
 };
@@ -1069,30 +1311,95 @@ export const adicionarMateriaisFromOrcamento = async (itens, fornecedorId, etapa
     const userId = userData.user.id;
     console.log('Usuário atual ID para cadastro de materiais:', userId);
     
+    // Função para normalizar nomes de materiais
+    const normalizarNome = (nome) => {
+      if (!nome) return '';
+      return nome
+        .toLowerCase()
+        .trim()
+        .replace(/\s+/g, ' ') // Remove espaços extras
+        .replace(/[^\w\sáàâãéèêíïóôõöúüçñ]/gi, '') // Remove caracteres especiais, mas mantém acentos
+        .trim();
+    };
+    
+    // Função para calcular similaridade entre duas strings (Coeficiente de Jaccard simples)
+    const calcularSimilaridade = (str1, str2) => {
+      const set1 = new Set(str1.split(' '));
+      const set2 = new Set(str2.split(' '));
+      
+      const intersection = new Set([...set1].filter(x => set2.has(x)));
+      const union = new Set([...set1, ...set2]);
+      
+      return intersection.size / union.size;
+    };
+    
+    // Buscar todos os materiais existentes deste fornecedor para verificação em lote
+    const { data: materiaisExistentes, error: fetchError } = await supabase
+      .from('materiais')
+      .select('id, nome, categoria, usuario_id, unidade, preco_unitario, fornecedor_id')
+      .eq('fornecedor_id', fornecedorId);
+      
+    if (fetchError) {
+      console.error('Erro ao buscar materiais existentes:', fetchError);
+      throw fetchError;
+    }
+    
+    console.log(`Encontrados ${materiaisExistentes?.length || 0} materiais existentes para este fornecedor`);
+    
+    // Normalizar nomes dos materiais existentes para comparação
+    const materiaisNormalizados = materiaisExistentes?.map(m => ({
+      ...m,
+      nome_normalizado: normalizarNome(m.nome)
+    })) || [];
+    
+    // Se temos etapaId e obraId, buscar materiais já vinculados à etapa para evitar duplicatas
+    let materiaisVinculados = [];
+    if (etapaId && obraId) {
+      const { data: vinculados, error: vinculadosError } = await supabase
+        .from('etapas_materiais')
+        .select('material_id')
+        .eq('etapa_id', etapaId)
+        .eq('obra_id', obraId);
+        
+      if (!vinculadosError) {
+        materiaisVinculados = vinculados?.map(v => v.material_id) || [];
+        console.log(`Encontrados ${materiaisVinculados.length} materiais já vinculados à etapa ${etapaId}`);
+      }
+    }
+    
     // Processar cada material do orçamento
     for (const item of itens) {
       try {
-        console.log(`Processando material: "${item.descricao}" (${item.quantidade} ${item.unidade}, valor: ${item.valor_unitario})`);
-        
-        // Verificar se material já existe (pelo nome e fornecedor)
-        const { data: materialExistente, error: checkError } = await supabase
-          .from('materiais')
-          .select('id, categoria, usuario_id')
-          .eq('nome', item.descricao)
-          .eq('fornecedor_id', fornecedorId)
-          .maybeSingle();
-          
-        if (checkError) {
-          console.error('Erro ao verificar existência de material:', checkError);
-          throw checkError;
+        // Normalizar nome do material
+        const nomeNormalizado = normalizarNome(item.descricao);
+        if (!nomeNormalizado) {
+          console.warn(`Ignorando item sem descrição: ${JSON.stringify(item)}`);
+          continue;
         }
         
+        console.log(`Processando material: "${item.descricao}" (${item.quantidade} ${item.unidade}, valor: ${item.valor_unitario})`);
+        console.log(`Nome normalizado: "${nomeNormalizado}"`);
+        
+        // Verificar materiais existentes - primeiro busca exata, depois por similaridade
+        let materialExistente = materiaisNormalizados.find(m => m.nome_normalizado === nomeNormalizado);
+        
+        // Se não encontrou correspondência exata, procurar por similaridade (limiar de 80%)
+        if (!materialExistente) {
+          materialExistente = materiaisNormalizados.find(m => 
+            calcularSimilaridade(m.nome_normalizado, nomeNormalizado) > 0.8
+          );
+          
+          if (materialExistente) {
+            console.log(`Material similar encontrado: "${materialExistente.nome}" (similaridade > 80%)`);
+          }
+        }
+          
         let materialId;
         
         // Se o material já existe, apenas atualizar o preço
         if (materialExistente) {
           materialId = materialExistente.id;
-          console.log(`Material existente encontrado (ID: ${materialId}): ${item.descricao}`);
+          console.log(`Material existente encontrado (ID: ${materialId}): ${materialExistente.nome}`);
           
           // Atualizar apenas o preço unitário e garantir que tenha o usuário_id correto
           const { data: updateResult, error: updateError } = await supabase
@@ -1120,7 +1427,7 @@ export const adicionarMateriaisFromOrcamento = async (itens, fornecedorId, etapa
         // Se o material não existe, criar sem categoria
         else {
           const novoMaterial = {
-            nome: item.descricao,
+            nome: item.descricao.trim(), // Usar nome original, mas sem espaços extras
             fornecedor_id: fornecedorId,
             unidade: item.unidade || 'un',
             preco_unitario: item.valor_unitario || 0,
@@ -1144,6 +1451,12 @@ export const adicionarMateriaisFromOrcamento = async (itens, fornecedorId, etapa
           }
           
           materialId = data.id;
+          // Adicionar à lista de materiais existentes para futuras comparações
+          materiaisNormalizados.push({
+            ...data,
+            nome_normalizado: nomeNormalizado
+          });
+          
           resultados.push({
             ...data,
             status: 'novo'
@@ -1154,27 +1467,52 @@ export const adicionarMateriaisFromOrcamento = async (itens, fornecedorId, etapa
         
         // Vincular o material à etapa, se fornecidos etapaId e obraId
         if (etapaId && obraId && materialId) {
-          console.log(`Vinculando material ${materialId} à etapa ${etapaId} da obra ${obraId}`);
-          
-          const etapaMaterial = {
-            etapa_id: etapaId,
-            obra_id: obraId,
-            material_id: materialId,
-            quantidade: item.quantidade || 1,
-            valor_total: (item.quantidade || 1) * (item.valor_unitario || 0),
-            data_compra: new Date().toISOString().split('T')[0],
-            usuario_id: userId
-          };
-          
-          const { error: etapaError } = await supabase
-            .from('etapas_materiais')
-            .insert([etapaMaterial]);
+          // Verificar se o material já está vinculado a esta etapa
+          if (materiaisVinculados.includes(materialId)) {
+            console.log(`Material ${materialId} já está vinculado à etapa ${etapaId}, atualizando`);
             
-          if (etapaError) {
-            console.error(`Erro ao vincular material ${materialId} à etapa ${etapaId}:`, etapaError);
-            // Continuar mesmo com erro
+            // Atualizar valores do material vinculado
+            const { error: updateError } = await supabase
+              .from('etapas_materiais')
+              .update({
+                quantidade: item.quantidade || 1,
+                valor_total: (item.quantidade || 1) * (item.valor_unitario || 0),
+                data_atualizacao: new Date().toISOString()
+              })
+              .eq('etapa_id', etapaId)
+              .eq('material_id', materialId);
+              
+            if (updateError) {
+              console.error(`Erro ao atualizar vínculo do material ${materialId} à etapa ${etapaId}:`, updateError);
+              // Continuar mesmo com erro
+            } else {
+              console.log(`Vínculo de material atualizado com sucesso na etapa ${etapaId}`);
+            }
           } else {
-            console.log(`Material vinculado com sucesso à etapa ${etapaId}`);
+            console.log(`Vinculando material ${materialId} à etapa ${etapaId} da obra ${obraId}`);
+            
+            const etapaMaterial = {
+              etapa_id: etapaId,
+              obra_id: obraId,
+              material_id: materialId,
+              quantidade: item.quantidade || 1,
+              valor_total: (item.quantidade || 1) * (item.valor_unitario || 0),
+              data_compra: new Date().toISOString().split('T')[0],
+              usuario_id: userId
+            };
+            
+            const { error: etapaError } = await supabase
+              .from('etapas_materiais')
+              .insert([etapaMaterial]);
+              
+            if (etapaError) {
+              console.error(`Erro ao vincular material ${materialId} à etapa ${etapaId}:`, etapaError);
+              // Continuar mesmo com erro
+            } else {
+              console.log(`Material vinculado com sucesso à etapa ${etapaId}`);
+              // Adicionar à lista de materiais vinculados para evitar duplicatas
+              materiaisVinculados.push(materialId);
+            }
           }
         }
       } catch (error) {
