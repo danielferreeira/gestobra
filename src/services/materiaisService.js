@@ -822,71 +822,39 @@ export const processarArquivoOrcamento = async (file) => {
     
     console.log('Processando arquivo:', fileName, 'Extensão:', fileExtension);
     
-    // Para PDFs e imagens, tentar usar OCR
-    if (['jpg', 'jpeg', 'png', 'pdf'].includes(fileExtension)) {
-      try {
-        // Fazer upload temporário para o storage
-        const storageRef = `uploads/${user.id}/${Date.now()}_${fileName}`;
-        
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from('arquivos')
-          .upload(storageRef, file, {
-            cacheControl: '3600',
-            upsert: false
-          });
-          
-        if (uploadError) {
-          console.error('Erro no upload do arquivo:', uploadError);
-          throw uploadError;
-        }
-        
-        // Obter URL pública do arquivo
-        const { data: urlData } = await supabase.storage
-          .from('arquivos')
-          .getPublicUrl(storageRef);
-          
-        const fileUrl = urlData.publicUrl;
-        
-        // Para PDFs, usar um endpoint de processamento de PDF (a ser implementado)
-        if (fileExtension === 'pdf') {
-          // TODO: Implementar processamento de PDF
-          // Por enquanto, usar dados padrão para teste
-          return processarDadosPadrao(fileName, user.id);
-        }
-        
-        // Para imagens, usar OCR
-        try {
-          console.log('Iniciando OCR para imagem:', fileUrl);
-          
-          const { data: { text } } = await Tesseract.recognize(
-            fileUrl,
-            'por', // Língua portuguesa
-            { 
-              logger: message => {
-                if (message.status === 'recognizing text') {
-                  console.log(`OCR progresso: ${message.progress * 100}%`);
-                }
-              }
-            }
-          );
-          
-          console.log('OCR concluído. Texto extraído:', text.substring(0, 100) + '...');
-          
-          // Processar o texto do OCR
-          return processarTextoOCR(text, fileName, user.id);
-        } catch (ocrError) {
-          console.error('Erro no processamento OCR:', ocrError);
-          // Se falhar o OCR, usar dados padrão para teste
-          return processarDadosPadrao(fileName, user.id);
-        }
-      } catch (err) {
-        console.error('Erro ao processar imagem/PDF:', err);
-        throw err;
-      }
-    } else {
-      // Para outros formatos, usar dados padrão para teste
-      return processarDadosPadrao(fileName, user.id);
+    // Verificar se é PDF - único formato aceito
+    if (fileExtension !== 'pdf') {
+      return {
+        success: false,
+        error: new Error('Formato de arquivo não suportado'),
+        message: 'Apenas arquivos PDF são suportados para importação de orçamentos.'
+      };
     }
+    
+    // Fazer upload temporário para o storage
+    const storageRef = `uploads/${user.id}/${Date.now()}_${fileName}`;
+    
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('arquivos')
+      .upload(storageRef, file, {
+        cacheControl: '3600',
+        upsert: false
+      });
+      
+    if (uploadError) {
+      console.error('Erro no upload do arquivo:', uploadError);
+      throw uploadError;
+    }
+    
+    // Obter URL pública do arquivo
+    const { data: urlData } = await supabase.storage
+      .from('arquivos')
+      .getPublicUrl(storageRef);
+      
+    const fileUrl = urlData.publicUrl;
+    
+    // Processar PDF com dados padrão
+    return processarDadosPadrao(fileName, user.id);
   } catch (error) {
     console.error('Erro ao processar arquivo de orçamento:', error);
     return {

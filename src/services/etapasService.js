@@ -444,38 +444,40 @@ export const criarEtapasPadrao = async (obraId) => {
       throw new Error(errorMsg);
     }
     
-    // Verificar conexão com o Supabase
-    try {
-      const { data: healthCheck, error: healthError } = await supabase
-        .from('obras')
-        .select('count(*)', { count: 'exact', head: true });
-      
-      if (healthError) {
-        console.error('Erro na verificação de conexão com o Supabase:', healthError);
-      } else {
-        console.log('Conexão com o Supabase verificada com sucesso');
-      }
-    } catch (connectionError) {
-      console.error('Falha ao testar conexão com Supabase:', connectionError);
+    // Verificar se há um usuário autenticado
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError) {
+      console.error('Erro ao obter usuário atual:', userError);
+      throw new Error('Erro de autenticação: ' + userError.message);
     }
     
-    // Verificar se a obra existe
-    try {
-      const { data: obra, error: obraError } = await supabase
-        .from('obras')
-        .select('id')
-        .eq('id', obraId)
-        .single();
-      
-      if (obraError) {
-        console.error('Erro ao verificar obra:', obraError);
-        throw new Error('Obra não encontrada: ' + obraError.message);
-      }
-      
-      console.log('Obra verificada com sucesso:', obra.id);
-    } catch (obraCheckError) {
-      console.error('Falha ao verificar obra:', obraCheckError);
+    if (!user) {
+      const authError = 'Usuário não autenticado. Faça login novamente.';
+      console.error(authError);
+      throw new Error(authError);
     }
+    
+    console.log('Usuário autenticado:', user.id);
+    
+    // Buscar informações da obra, incluindo orçamento total
+    const { data: obra, error: obraError } = await supabase
+      .from('obras')
+      .select('*')
+      .eq('id', obraId)
+      .single();
+    
+    if (obraError) {
+      console.error('Erro ao buscar obra:', obraError);
+      throw new Error('Erro ao buscar informações da obra: ' + obraError.message);
+    }
+    
+    const orcamentoTotal = parseFloat(obra.orcamento) || 0;
+    console.log('Orçamento total da obra:', orcamentoTotal);
+    
+    // Calcular valor previsto por etapa (dividir o orçamento igualmente)
+    const totalEtapas = etapasPadroes.length;
+    const valorPorEtapa = totalEtapas > 0 ? orcamentoTotal / totalEtapas : 0;
+    console.log(`Distribuindo orçamento: R$ ${valorPorEtapa.toFixed(2)} por etapa`);
     
     // Preparar etapas para inserção
     const etapasParaInserir = etapasPadroes.map((etapa, index) => {
@@ -490,11 +492,11 @@ export const criarEtapasPadrao = async (obraId) => {
         ordem: index + 1,
         data_inicio: dataAtual,
         data_previsao_termino: null,
-        valor_previsto: 0,
+        valor_previsto: valorPorEtapa, // Atribuir o valor dividido por etapa
         valor_realizado: 0,
         progresso_automatico: true
       };
-      console.log(`Preparando etapa ${index + 1}:`, novaEtapa.nome);
+      console.log(`Preparando etapa ${index + 1}: ${novaEtapa.nome}, Valor previsto: R$ ${novaEtapa.valor_previsto.toFixed(2)}`);
       return novaEtapa;
     });
 

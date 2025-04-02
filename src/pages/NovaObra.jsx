@@ -3,9 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabaseClient';
 import { criarEtapasPadrao } from '../services/etapasService';
 import { FaArrowLeft, FaSave } from 'react-icons/fa';
+import { useAuth } from '../context/AuthContext';
 
 const NovaObra = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [formData, setFormData] = useState({
@@ -32,9 +34,15 @@ const NovaObra = () => {
     setError(null);
 
     try {
+      // Verificar se o usuário está autenticado
+      if (!user) {
+        throw new Error('Usuário não autenticado. Faça login novamente.');
+      }
+
       // Criar uma cópia dos dados do formulário para enviar
       const dataToInsert = {
         ...formData,
+        user_id: user.id, // Adicionando o ID do usuário atual
         created_at: new Date(),
         updated_at: new Date()
       };

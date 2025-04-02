@@ -2,9 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { FaPlus, FaSearch, FaEdit, FaTrash, FaEye, FaBuilding, FaFilter, FaSort, FaThList, FaTh, FaCalendarAlt, FaMoneyBillWave, FaMapMarkerAlt, FaTools, FaCheckCircle, FaHourglass } from 'react-icons/fa';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabaseClient';
+import { useAuth } from '../context/AuthContext';
 
 const Obras = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [obras, setObras] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
@@ -167,6 +169,11 @@ const Obras = () => {
     try {
       setLoading(true);
       
+      // Verificar se o usuário está autenticado
+      if (!user) {
+        throw new Error('Usuário não autenticado. Faça login novamente.');
+      }
+      
       const obraData = {
         ...formData,
         orcamento: formData.orcamento === '' ? null : parseFloat(formData.orcamento || 0),
@@ -183,10 +190,13 @@ const Obras = () => {
           .update(obraData)
           .eq('id', currentObra.id);
       } else {
-        // Adicionar nova obra
+        // Adicionar nova obra - incluir user_id para satisfazer a política RLS
         result = await supabase
           .from('obras')
-          .insert([obraData]);
+          .insert([{
+            ...obraData,
+            user_id: user.id
+          }]);
       }
       
       if (result.error) {

@@ -266,7 +266,7 @@ const UploadOrcamento = ({ onSuccess, etapaId = null, obraId = null }) => {
             <input
               type="file"
               className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-              accept=".pdf,.xls,.xlsx,.doc,.docx,.jpg,.png"
+              accept=".pdf"
               onChange={handleFileChange}
               disabled={loading}
             />
@@ -348,7 +348,7 @@ const UploadOrcamento = ({ onSuccess, etapaId = null, obraId = null }) => {
         </button>
         
         <p className="mt-3 text-xs text-gray-500 text-center">
-          Formatos suportados: PDF, Excel, Word e imagens (JPG, PNG)
+          Apenas arquivos PDF são suportados. Para outros formatos, cadastre os materiais manualmente.
         </p>
       </div>
     );
