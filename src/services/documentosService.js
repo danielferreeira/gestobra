@@ -39,6 +39,79 @@ export const getDocumentoById = async (id) => {
 };
 
 /**
+ * Criar um novo documento (sem upload de arquivo)
+ * @param {Object} documentoData Dados do documento
+ * @returns {Promise} Promise com o resultado da operação
+ */
+export const createDocumento = async (documentoData) => {
+  try {
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    
+    if (userError) {
+      return { error: userError };
+    }
+    
+    // Se tiver um arquivo no formData, usar uploadDocumento em vez disso
+    if (documentoData.arquivo) {
+      return await uploadDocumento(
+        {
+          obra_id: documentoData.obra_id,
+          titulo: documentoData.nome,
+          descricao: documentoData.descricao,
+          tipo: documentoData.categoria
+        }, 
+        documentoData.arquivo
+      );
+    }
+    
+    // Criar novo documento sem arquivo
+    const { data, error } = await supabase
+      .from('documentos')
+      .insert([{
+        obra_id: documentoData.obra_id,
+        titulo: documentoData.nome,
+        descricao: documentoData.descricao,
+        tipo: documentoData.categoria,
+        user_id: userData.user.id,
+        created_at: new Date()
+      }])
+      .select();
+    
+    return { data, error };
+  } catch (error) {
+    console.error('Erro ao criar documento:', error);
+    return { error };
+  }
+};
+
+/**
+ * Download de documento
+ * @param {string} id ID do documento
+ * @returns {Promise} Promise com o URL para download
+ */
+export const downloadDocumento = async (id) => {
+  try {
+    // Obter informações do documento
+    const { data: documento, error: getError } = await getDocumentoById(id);
+    
+    if (getError) {
+      return { error: getError };
+    }
+    
+    // Extrair o caminho do arquivo da URL
+    if (!documento.arquivo_url) {
+      return { error: { message: 'URL do arquivo não encontrada' } };
+    }
+    
+    // Retorna a URL pública
+    return { data: { downloadUrl: documento.arquivo_url }, error: null };
+  } catch (error) {
+    console.error('Erro ao gerar link de download:', error);
+    return { error };
+  }
+};
+
+/**
  * Upload de documento
  * @param {Object} documentoData Dados do documento (titulo, descricao, tipo, obra_id)
  * @param {File} arquivo Arquivo a ser enviado

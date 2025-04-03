@@ -8,6 +8,11 @@ import Obras from './pages/Obras';
 import DetalheObra from './pages/DetalheObra';
 import NovaObra from './pages/NovaObra';
 import Fornecedores from './pages/Fornecedores';
+import Financeiro from './pages/Financeiro';
+import Documentos from './pages/Documentos';
+import Relatorios from './pages/Relatorios';
+import Configuracoes from './pages/Configuracoes';
+import ProtectedRoute from './components/ProtectedRoute';
 
 function App() {
   return (
@@ -19,12 +24,22 @@ function App() {
             element={<Login />}
           />
           
-          <Route element={<Layout />}>
+          <Route 
+            element={
+              <ProtectedRoute>
+                <Layout />
+              </ProtectedRoute>
+            }
+          >
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/obras" element={<Obras />} />
             <Route path="/obras/nova" element={<NovaObra />} />
             <Route path="/obras/:id" element={<DetalheObra />} />
             <Route path="/fornecedores" element={<Fornecedores />} />
+            <Route path="/financeiro" element={<Financeiro />} />
+            <Route path="/documentos" element={<Documentos />} />
+            <Route path="/relatorios" element={<Relatorios />} />
+            <Route path="/configuracoes" element={<Configuracoes />} />
           </Route>
           
           <Route

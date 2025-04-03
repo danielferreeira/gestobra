@@ -20,6 +20,12 @@ const Layout = () => {
     }
   };
 
+  // Função para navegar quando um item do menu é clicado
+  const handleMenuItemClick = (path) => {
+    console.log('Navegando para:', path);
+    navigate(path);
+  };
+
   const menuItems = [
     { path: '/dashboard', icon: <FaHome />, label: 'Dashboard' },
     { path: '/obras', icon: <FaBuilding />, label: 'Obras' },
@@ -52,15 +58,15 @@ const Layout = () => {
           <ul className="py-4">
             {menuItems.map((item) => (
               <li key={item.path}>
-                <Link
-                  to={item.path}
-                  className={`flex items-center py-3 px-4 ${
+                <button
+                  onClick={() => handleMenuItemClick(item.path)}
+                  className={`w-full flex items-center py-3 px-4 text-left ${
                     location.pathname === item.path ? 'bg-blue-700' : 'hover:bg-blue-700'
                   } transition-colors duration-200`}
                 >
                   <span className="text-lg">{item.icon}</span>
                   {sidebarOpen && <span className="ml-3">{item.label}</span>}
-                </Link>
+                </button>
               </li>
             ))}
           </ul>

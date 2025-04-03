@@ -208,11 +208,11 @@ const Documentos = () => {
         throw error;
       }
       
-      // Criar link para download
-      const url = URL.createObjectURL(data);
+      // Usar a URL diretamente para download
       const a = document.createElement('a');
-      a.href = url;
-      a.download = nome;
+      a.href = data.downloadUrl;
+      a.download = nome; // Nome do arquivo para download
+      a.target = '_blank'; // Abrir em nova aba
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
