@@ -435,17 +435,24 @@ const EtapasObra = ({ obraId, onOrcamentoChange, onProgressoChange }) => {
       setLoading(true);
       setError(null);
 
-      const updates = newEtapas.map((e, i) => ({
-        id: e.id,
-        ordem: i + 1
-      }));
+      // Atualizar cada etapa individualmente
+      for (let i = 0; i < newEtapas.length; i++) {
+        const { error } = await supabase
+          .from('etapas_obra')
+          .update({ 
+            ordem: i + 1, 
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', newEtapas[i].id)
+          .eq('obra_id', obraId); // Garantir que estamos atualizando etapas apenas desta obra
 
-      const { error } = await supabase
-        .from('etapas_obra')
-        .upsert(updates);
+        if (error) {
+          console.error(`Erro ao atualizar ordem da etapa ${newEtapas[i].id}:`, error);
+          throw error;
+        }
+      }
 
-      if (error) throw error;
-
+      // Atualizar o estado local após sucesso das atualizações no banco
       setEtapas(newEtapas);
     } catch (error) {
       console.error('Erro ao reordenar etapas:', error);
@@ -510,52 +517,88 @@ const EtapasObra = ({ obraId, onOrcamentoChange, onProgressoChange }) => {
     setShowModal(true);
   };
 
-  // Atualizar progresso automático de todas as etapas configuradas
+  // Atualizar progresso automaticamente
   const atualizarProgressoAutomaticoEtapas = async () => {
     try {
-      // Filtrar etapas com progresso automático ativado
-      const etapasAutomaticas = etapas.filter(etapa => etapa.progresso_automatico);
+      setLoading(true);
+      setError(null);
+
+      console.log('Iniciando atualização automática de progresso para todas as etapas');
+
+      // Verificar se o usuário atual possui permissões para esta obra
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData?.user) {
+        throw new Error('Usuário não autenticado');
+      }
       
-      console.log(`Atualizando progresso de ${etapasAutomaticas.length} etapas automáticas`);
+      // Buscar todas as etapas com progresso automático para a obra atual
+      const { data: etapasAuto, error: errorEtapas } = await supabase
+        .from('etapas_obra')
+        .select('id, nome, obra_id, valor_previsto, valor_realizado, progresso_automatico')
+        .eq('obra_id', obraId)
+        .eq('progresso_automatico', true);
       
-      if (etapasAutomaticas.length === 0) {
+      if (errorEtapas) {
+        console.error("Erro ao buscar etapas:", errorEtapas);
+        throw errorEtapas;
+      }
+      
+      if (!etapasAuto || etapasAuto.length === 0) {
         console.log("Nenhuma etapa com progresso automático encontrada");
-        setSuccessMessage("Não existem etapas configuradas para progresso automático");
-        setTimeout(() => setSuccessMessage(''), 5000);
+        setLoading(false);
         return;
       }
       
-      // Preparar atualizações para cada etapa
-      const atualizacoes = etapasAutomaticas.map(etapa => {
-        const valorRealizado = etapa.valor_realizado || 0;
-        const valorPrevisto = etapa.valor_previsto || 0;
-        // Calcular o progresso
-        let novoProgresso = calcularProgressoFinanceiro(valorRealizado, valorPrevisto);
+      console.log(`Encontradas ${etapasAuto.length} etapas para atualização automática`);
+      
+      // Preparar atualizações
+      const atualizacoes = [];
+      
+      for (const etapa of etapasAuto) {
+        const valorPrevisto = parseFloat(etapa.valor_previsto || 0);
+        const valorRealizado = parseFloat(etapa.valor_realizado || 0);
         
-        // Garantir que o valor seja um inteiro para o banco de dados
-        // Para valores muito pequenos, garantir pelo menos 1% se houver algum valor realizado
-        if (valorRealizado > 0 && novoProgresso < 1) {
-          novoProgresso = 1; // Mínimo de 1% se houver valor realizado
-        } else {
-          novoProgresso = Math.round(novoProgresso); // Arredondar para inteiro
+        if (isNaN(valorPrevisto) || valorPrevisto <= 0) {
+          console.log(`Etapa ${etapa.id} (${etapa.nome}) ignorada: valor previsto inválido`);
+          continue;
         }
         
-        console.log(`Etapa ${etapa.id} (${etapa.nome}): Valor realizado=${valorRealizado}, Valor previsto=${valorPrevisto}, Novo progresso=${novoProgresso}%`);
+        // Calcular progresso financeiro
+        const novoProgresso = valorPrevisto > 0 
+          ? Math.min(Math.round((valorRealizado / valorPrevisto) * 100), 100) 
+          : 0;
         
-        return {
+        console.log(`Etapa ${etapa.id} (${etapa.nome}): Valor previsto ${valorPrevisto}, Valor realizado ${valorRealizado}, Novo progresso ${novoProgresso}%`);
+        
+        atualizacoes.push({
           id: etapa.id,
           progresso: novoProgresso
-        };
-      });
+        });
+      }
       
-      // Atualizar no banco de dados
-      const { error } = await supabase
-        .from('etapas_obra')
-        .upsert(atualizacoes);
+      if (atualizacoes.length === 0) {
+        console.log("Nenhuma atualização necessária");
+        setLoading(false);
+        return;
+      }
       
-      if (error) {
-        console.error("Erro ao atualizar progresso no banco:", error);
-        throw error;
+      console.log(`Enviando ${atualizacoes.length} atualizações...`);
+      
+      // Atualizar cada etapa individualmente usando update normal
+      for (const atualizacao of atualizacoes) {
+        const { error: updateError } = await supabase
+          .from('etapas_obra')
+          .update({ 
+            progresso: atualizacao.progresso,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', atualizacao.id)
+          .eq('obra_id', obraId);
+          
+        if (updateError) {
+          console.error(`Erro ao atualizar etapa ${atualizacao.id}:`, updateError);
+          // Continuar com as outras atualizações mesmo se uma falhar
+        }
       }
       
       console.log("Progresso atualizado com sucesso para todas as etapas");
@@ -569,6 +612,8 @@ const EtapasObra = ({ obraId, onOrcamentoChange, onProgressoChange }) => {
       console.error('Erro ao atualizar progresso automático:', error);
       setError('Erro ao atualizar progresso automático: ' + error.message);
       setTimeout(() => setError(''), 5000);
+    } finally {
+      setLoading(false);
     }
   };
 

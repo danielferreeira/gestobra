@@ -176,7 +176,12 @@ const OrcamentoObra = ({ obraId, orcamentoTotal, onTotalGastoChange }) => {
       if (formData.valor === '') {
         despesaData.valor = null;
       } else {
-        despesaData.valor = parseFloat(formData.valor.replace(',', '.'));
+        // Verificar o tipo de formData.valor e tratá-lo adequadamente
+        despesaData.valor = typeof formData.valor === 'string'
+          ? parseFloat(formData.valor.replace(',', '.'))
+          : typeof formData.valor === 'number'
+            ? formData.valor
+            : parseFloat(String(formData.valor || '0').replace(',', '.'));
       }
       
       let result;

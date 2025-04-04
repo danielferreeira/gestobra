@@ -231,26 +231,36 @@ const DocumentosObra = ({ obraId }) => {
     }
   };
 
-  // Abrir modal para adicionar/editar documento
-  const openModal = (documento = null) => {
-    if (documento) {
-      setCurrentDocumento(documento);
-      setFormData({
-        nome: documento.nome || documento.titulo || '',
-        descricao: documento.descricao || '',
-        tipo: documento.tipo,
-        arquivo: null
-      });
-    } else {
-      setCurrentDocumento(null);
-      setFormData({
-        nome: '',
-        descricao: '',
-        tipo: 'contrato',
-        arquivo: null
-      });
-    }
+  // Manipular evento de clique em editar
+  const handleEdit = (documento) => {
+    setCurrentDocumento(documento);
     
+    // Inicialize as tags como um array vazio se for null ou undefined
+    const documentTags = Array.isArray(documento.tags) ? documento.tags : [];
+    
+    setFormData({
+      nome: documento.titulo || documento.nome || '',
+      descricao: documento.descricao || '',
+      tipo: documento.tipo || 'outro',
+      arquivo: null,
+      tags: documentTags,
+      versao: documento.versao || '1.0'
+    });
+    
+    setShowModal(true);
+  };
+
+  // Abrir o modal para criar um novo documento
+  const openModal = () => {
+    setCurrentDocumento(null);
+    setFormData({
+      nome: '',
+      descricao: '',
+      tipo: 'contrato',
+      arquivo: null,
+      tags: [],
+      versao: '1.0'
+    });
     setShowModal(true);
   };
 
@@ -273,129 +283,114 @@ const DocumentosObra = ({ obraId }) => {
     
     try {
       setLoading(true);
+      setError(null);
       
-      if (currentDocumento) {
-        // Atualizar documento existente
-        if (formData.arquivo) {
-          // Se tiver um novo arquivo, fazer upload
-          await handleUpload(currentDocumento.id);
-        } else {
-          // Apenas atualizar os metadados
-          const { error } = await supabase
-            .from('documentos')
-            .update({
-              nome: formData.nome,
-              descricao: formData.descricao,
-              tipo: formData.tipo,
-              updated_at: new Date()
-            })
-            .eq('id', currentDocumento.id);
-          
-          if (error) {
-            throw error;
-          }
-        }
-      } else {
-        // Criar novo documento com arquivo
-        if (!formData.arquivo) {
-          throw new Error('Selecione um arquivo para upload');
-        }
-        
-        await handleUpload();
+      // Preparar o arquivo para upload
+      if (!currentDocumento && !formData.arquivo) {
+        throw new Error('Selecione um arquivo para upload');
       }
       
-      // Recarregar documentos
-      const { data, error } = await supabase
+      // Upload do arquivo
+      let publicUrl = '';
+      
+      if (formData.arquivo) {
+        const file = formData.arquivo;
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${obraId}/${Math.random().toString(36).substring(2)}.${fileExt}`;
+        const filePath = `${fileName}`;
+        
+        // Upload para o bucket
+        const { error: uploadError } = await supabase.storage
+          .from('documentos')
+          .upload(filePath, file, {
+            cacheControl: '3600',
+            upsert: false,
+            onUploadProgress: (progress) => {
+              const percent = Math.round((progress.loaded / progress.total) * 100);
+              setUploadProgress(percent);
+            }
+          });
+        
+        if (uploadError) {
+          throw uploadError;
+        }
+        
+        // Obter URL pública
+        const { data: urlData } = supabase.storage
+          .from('documentos')
+          .getPublicUrl(filePath);
+        
+        publicUrl = urlData.publicUrl;
+      }
+      
+      // Inserir ou atualizar registro no banco
+      if (currentDocumento) {
+        // Atualizar documento existente
+        const updateData = {
+          titulo: formData.nome,
+          descricao: formData.descricao,
+          tipo: formData.tipo,
+          updated_at: new Date()
+        };
+        
+        // Adicionar URL apenas se um novo arquivo foi enviado
+        if (publicUrl) {
+          updateData.arquivo_url = publicUrl;
+          updateData.arquivo_nome = formData.arquivo.name;
+        }
+        
+        const { error: updateError } = await supabase
+          .from('documentos')
+          .update(updateData)
+          .eq('id', currentDocumento.id);
+        
+        if (updateError) {
+          throw updateError;
+        }
+      } else {
+        // Inserir novo documento
+        const insertData = {
+          obra_id: obraId,
+          titulo: formData.nome,
+          descricao: formData.descricao,
+          tipo: formData.tipo,
+          arquivo_url: publicUrl,
+          arquivo_nome: formData.arquivo.name,
+          created_at: new Date()
+        };
+        
+        // Tentar usar método simples de insert
+        const { error: insertError } = await supabase
+          .from('documentos')
+          .insert([insertData]);
+        
+        if (insertError) {
+          console.error('Erro ao inserir documento:', insertError);
+          throw new Error(`Não foi possível salvar o documento: ${insertError.message}`);
+        }
+      }
+      
+      // Recarregar lista de documentos
+      const { data: refreshData, error: refreshError } = await supabase
         .from('documentos')
         .select('*')
         .eq('obra_id', obraId)
         .order('created_at', { ascending: false });
       
-      if (error) {
-        throw error;
+      if (refreshError) {
+        throw refreshError;
       }
       
-      setDocumentos(data || []);
+      // Atualizar estado e fechar modal
+      setDocumentos(refreshData || []);
       closeModal();
+      
     } catch (error) {
       console.error('Erro ao salvar documento:', error);
       setError(error.message || 'Erro ao salvar documento');
     } finally {
       setLoading(false);
-    }
-  };
-
-  // Função para fazer upload de arquivo
-  const handleUpload = async (documentoId = null) => {
-    try {
-      const file = formData.arquivo;
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${obraId}/${Math.random().toString(36).substring(2)}.${fileExt}`;
-      const filePath = `${fileName}`;
-      
-      // Upload do arquivo para o Storage
-      const { data: fileData, error: fileError } = await supabase.storage
-        .from('documentos')
-        .upload(filePath, file, {
-          cacheControl: '3600',
-          upsert: false,
-          onUploadProgress: (progress) => {
-            const percent = Math.round((progress.loaded / progress.total) * 100);
-            setUploadProgress(percent);
-          }
-        });
-      
-      if (fileError) {
-        throw fileError;
-      }
-      
-      // Obter URL pública do arquivo
-      const { data: urlData } = supabase.storage
-        .from('documentos')
-        .getPublicUrl(filePath);
-      
-      const publicUrl = urlData.publicUrl;
-      
-      if (documentoId) {
-        // Atualizar documento existente
-        const { error } = await supabase
-          .from('documentos')
-          .update({
-            titulo: formData.nome,
-            descricao: formData.descricao,
-            tipo: formData.tipo,
-            arquivo_url: publicUrl,
-            arquivo_nome: file.name,
-            updated_at: new Date()
-          })
-          .eq('id', documentoId);
-        
-        if (error) {
-          throw error;
-        }
-      } else {
-        // Criar novo documento
-        const { data: userData } = await supabase.auth.getUser();
-        
-        const { error } = await supabase
-          .from('documentos')
-          .insert([{
-            obra_id: obraId,
-            titulo: formData.nome,
-            descricao: formData.descricao,
-            tipo: formData.tipo,
-            arquivo_url: publicUrl,
-            arquivo_nome: file.name,
-            user_id: userData.user.id,
-            created_at: new Date()
-          }]);
-        
-        if (error) {
-          throw error;
-        }
-      }
-    } catch (error) {
-      throw error;
+      setUploadProgress(0);
     }
   };
 
@@ -475,7 +470,7 @@ const DocumentosObra = ({ obraId }) => {
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-xl font-semibold">Documentos da Obra</h2>
         <button
-          onClick={() => openModal()}
+          onClick={openModal}
           className="bg-blue-600 text-white px-4 py-2 rounded-md flex items-center"
         >
           <FaPlus className="mr-2" /> Adicionar Documento
@@ -621,8 +616,8 @@ const DocumentosObra = ({ obraId }) => {
                         </button>
                         <button
                           onClick={() => handleDownload(documento)}
-                          className="text-blue-600 hover:text-blue-900"
-                          title="Baixar"
+                          className="text-green-600 hover:text-green-900"
+                          title="Download"
                         >
                           <FaDownload />
                         </button>
@@ -634,7 +629,7 @@ const DocumentosObra = ({ obraId }) => {
                           <FaShare />
                         </button>
                         <button
-                          onClick={() => openModal(documento)}
+                          onClick={() => handleEdit(documento)}
                           className="text-blue-600 hover:text-blue-900"
                           title="Editar"
                         >
@@ -724,7 +719,7 @@ const DocumentosObra = ({ obraId }) => {
                   type="text"
                   id="tags"
                   name="tags"
-                  value={formData.tags.join(', ')}
+                  value={Array.isArray(formData.tags) ? formData.tags.join(', ') : ''}
                   onChange={(e) => setFormData(prev => ({
                     ...prev,
                     tags: e.target.value.split(',').map(tag => tag.trim()).filter(Boolean)

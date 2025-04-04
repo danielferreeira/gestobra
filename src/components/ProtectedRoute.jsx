@@ -23,7 +23,7 @@ const ProtectedRoute = ({ children }) => {
 
   // Redirecionar para login se não estiver autenticado
   if (!user) {
-    return <Navigate to="/" replace state={{ from: location }} />;
+    return <Navigate to="/login" replace state={{ from: location }} />;
   }
 
   // Renderizar as rotas protegidas

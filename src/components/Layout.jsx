@@ -31,7 +31,6 @@ const Layout = () => {
     { path: '/obras', icon: <FaBuilding />, label: 'Obras' },
     { path: '/financeiro', icon: <FaMoneyBillWave />, label: 'Financeiro' },
     { path: '/fornecedores', icon: <FaBoxes />, label: 'Fornecedores' },
-    { path: '/documentos', icon: <FaFileInvoice />, label: 'Documentos' },
     { path: '/relatorios', icon: <FaChartBar />, label: 'Relatórios' },
     { path: '/configuracoes', icon: <FaUserCog />, label: 'Configurações' },
   ];

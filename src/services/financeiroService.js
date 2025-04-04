@@ -375,4 +375,110 @@ export const getContasPendentes = async () => {
     console.error('Erro ao buscar contas pendentes:', error);
     return { data: null, error };
   }
+};
+
+/**
+ * Cria uma despesa baseada em um material adicionado a uma etapa
+ * @param {Object} materialData Dados do material
+ * @returns {Promise} Promise com o resultado da operação
+ */
+export const createDespesaMaterial = async (materialData) => {
+  try {
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    
+    if (userError) throw userError;
+    
+    // Buscar os detalhes do material para a descrição
+    const { data: materialInfo, error: materialError } = await supabase
+      .from('materiais')
+      .select('nome, categoria')
+      .eq('id', materialData.material_id)
+      .single();
+    
+    if (materialError) throw materialError;
+    
+    // Buscar os detalhes da etapa para a descrição
+    const { data: etapaInfo, error: etapaError } = await supabase
+      .from('etapas_obra')
+      .select('nome')
+      .eq('id', materialData.etapa_id)
+      .single();
+    
+    if (etapaError) throw etapaError;
+    
+    // Criar a descrição da despesa com detalhes do material e etapa
+    const descricao = `Material: ${materialInfo.nome} - Etapa: ${etapaInfo.nome}`;
+    
+    // Montar os dados da transação
+    const despesaData = {
+      descricao,
+      valor: materialData.valor_total,
+      data: materialData.data_compra || new Date().toISOString().split('T')[0],
+      categoria: 'material',
+      obra_id: materialData.obra_id,
+      tipo: 'despesa',
+      status_pagamento: 'pendente', // Materiais começam como pendentes por padrão
+      user_id: userData.user.id,
+      etapa_id: materialData.etapa_id,
+      material_id: materialData.material_id,
+      created_at: new Date().toISOString(),
+      nota_fiscal: materialData.nota_fiscal || null
+    };
+    
+    // Inserir a despesa
+    const { data, error } = await supabase
+      .from('despesas')
+      .insert([despesaData])
+      .select();
+    
+    if (error) throw error;
+    
+    return { data, error: null };
+  } catch (error) {
+    console.error('Erro ao criar despesa de material:', error);
+    return { data: null, error };
+  }
+};
+
+/**
+ * Busca despesas específicas de materiais com detalhes
+ * @param {Object} filters Filtros opcionais (obra_id, dataInicio, dataFim)
+ * @returns {Promise} Promise com os dados das despesas de materiais
+ */
+export const getDespesasMateriais = async (filters = {}) => {
+  try {
+    let query = supabase
+      .from('despesas')
+      .select(`
+        *,
+        obras (id, nome),
+        etapas_obra:etapa_id (id, nome),
+        materiais:material_id (id, nome, categoria, unidade, preco_unitario)
+      `)
+      .not('material_id', 'is', null);
+    
+    // Aplicar filtros se fornecidos
+    if (filters.obra_id) {
+      query = query.eq('obra_id', filters.obra_id);
+    }
+    
+    if (filters.dataInicio) {
+      query = query.gte('data', filters.dataInicio);
+    }
+    
+    if (filters.dataFim) {
+      query = query.lte('data', filters.dataFim);
+    }
+    
+    // Ordenar por data, mais recentes primeiro
+    query = query.order('data', { ascending: false });
+    
+    const { data, error } = await query;
+    
+    if (error) throw error;
+    return { data, error: null };
+  } catch (error) {
+    console.error('Erro ao buscar despesas de materiais:', error);
+    return { data: null, error };
+  }
 }; 

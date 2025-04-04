@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import Login from './pages/Login';
+import Home from './pages/Home';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import Obras from './pages/Obras';
@@ -9,7 +10,6 @@ import DetalheObra from './pages/DetalheObra';
 import NovaObra from './pages/NovaObra';
 import Fornecedores from './pages/Fornecedores';
 import Financeiro from './pages/Financeiro';
-import Documentos from './pages/Documentos';
 import Relatorios from './pages/Relatorios';
 import Configuracoes from './pages/Configuracoes';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -21,6 +21,11 @@ function App() {
         <Routes>
           <Route
             path="/"
+            element={<Home />}
+          />
+          
+          <Route
+            path="/login"
             element={<Login />}
           />
           
@@ -37,7 +42,6 @@ function App() {
             <Route path="/obras/:id" element={<DetalheObra />} />
             <Route path="/fornecedores" element={<Fornecedores />} />
             <Route path="/financeiro" element={<Financeiro />} />
-            <Route path="/documentos" element={<Documentos />} />
             <Route path="/relatorios" element={<Relatorios />} />
             <Route path="/configuracoes" element={<Configuracoes />} />
           </Route>

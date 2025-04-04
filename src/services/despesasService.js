@@ -46,11 +46,22 @@ export const createDespesa = async (despesaData) => {
     return { data: null, error: userError };
   }
   
+  // Garantir que o tipo seja sempre 'despesa' quando criado pelo módulo de Orçamento
+  const dadosCompletos = {
+    ...despesaData,
+    tipo: 'despesa', // Forçar o tipo como despesa
+    user_id: userData.user.id,
+    created_at: new Date().toISOString()
+  };
+
+  // Definir status_pagamento como 'pendente' se não estiver definido
+  if (!dadosCompletos.status_pagamento) {
+    dadosCompletos.status_pagamento = 'pendente';
+  }
+  
   const { data, error } = await supabase
     .from('despesas')
-    .insert([
-      { ...despesaData, user_id: userData.user.id }
-    ])
+    .insert([dadosCompletos])
     .select();
   
   return { data, error };

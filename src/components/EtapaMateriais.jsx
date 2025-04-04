@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { FaPlus, FaEdit, FaTrash, FaBoxes, FaSearch, FaBuilding } from 'react-icons/fa';
 import { supabase } from '../services/supabaseClient';
 import { getMateriais } from '../services/materiaisService';
+import { createDespesaMaterial } from '../services/financeiroService';
 
 const EtapaMateriais = ({ etapaId, obraId, onUpdate }) => {
   const [materiais, setMateriais] = useState([]);
@@ -291,15 +292,54 @@ const EtapaMateriais = ({ etapaId, obraId, onUpdate }) => {
           .from('etapas_materiais')
           .update(materialData)
           .eq('id', currentMaterial.id);
+          
+        if (result.error) {
+          throw result.error;
+        }
+        
+        // Tenta buscar despesa existente relacionada a este material
+        const { data: despesaExistente, error: despesaError } = await supabase
+          .from('despesas')
+          .select('id')
+          .eq('material_id', materialData.material_id)
+          .eq('etapa_id', etapaId)
+          .maybeSingle();
+          
+        if (!despesaError) {
+          if (despesaExistente) {
+            // Atualizar a despesa existente
+            const { error: updateError } = await supabase
+              .from('despesas')
+              .update({
+                valor: materialData.valor_total,
+                data: materialData.data_compra,
+                nota_fiscal: materialData.nota_fiscal
+              })
+              .eq('id', despesaExistente.id);
+              
+            if (updateError) {
+              console.error('Erro ao atualizar despesa:', updateError);
+            }
+          } else {
+            // Criar uma nova despesa
+            await createDespesaMaterial(materialData);
+          }
+        }
       } else {
         // Adicionar novo material
         result = await supabase
           .from('etapas_materiais')
           .insert([materialData]);
-      }
-      
-      if (result.error) {
-        throw result.error;
+          
+        if (result.error) {
+          throw result.error;
+        }
+        
+        // Criar uma despesa para o novo material
+        const resultDespesa = await createDespesaMaterial(materialData);
+        if (resultDespesa.error) {
+          console.error('Aviso: Material adicionado, mas erro ao criar despesa:', resultDespesa.error);
+        }
       }
 
       // Atualizar o valor realizado da etapa
@@ -308,7 +348,13 @@ const EtapaMateriais = ({ etapaId, obraId, onUpdate }) => {
       closeModal();
     } catch (error) {
       console.error('Erro ao salvar material:', error);
-      setError('Erro ao salvar material. Por favor, tente novamente.');
+      
+      // Verificar se é um erro de violação de chave única (duplicidade)
+      if (error.code === '23505' && error.message.includes('etapas_materiais_etapa_id_material_id_key')) {
+        setError('Este material já está cadastrado nesta etapa. Por favor, edite o material existente para ajustar a quantidade conforme necessário.');
+      } else {
+        setError('Erro ao salvar material. Por favor, tente novamente.');
+      }
     } finally {
       setLoading(false);
     }
@@ -323,12 +369,35 @@ const EtapaMateriais = ({ etapaId, obraId, onUpdate }) => {
     try {
       setLoading(true);
       
+      // Buscar ID do material para remover despesa associada
+      const { data: material, error: materialError } = await supabase
+        .from('etapas_materiais')
+        .select('material_id')
+        .eq('id', materialId)
+        .single();
+        
+      if (materialError) throw materialError;
+      
+      // Remover o material
       const { error } = await supabase
         .from('etapas_materiais')
         .delete()
         .eq('id', materialId);
       
       if (error) throw error;
+      
+      // Tenta remover a despesa associada
+      if (material && material.material_id) {
+        const { error: despesaError } = await supabase
+          .from('despesas')
+          .delete()
+          .eq('material_id', material.material_id)
+          .eq('etapa_id', etapaId);
+          
+        if (despesaError) {
+          console.error('Erro ao remover despesa associada:', despesaError);
+        }
+      }
 
       // Atualizar o valor realizado da etapa
       await atualizarValorRealizadoEtapa();
@@ -484,6 +553,12 @@ const EtapaMateriais = ({ etapaId, obraId, onUpdate }) => {
                 &times;
               </button>
             </div>
+            
+            {error && error.includes('já está cadastrado') && (
+              <div className="bg-red-100 text-red-700 p-3 rounded-md mb-4">
+                {error}
+              </div>
+            )}
             
             <form onSubmit={handleSubmit}>
               <div className="space-y-4">
