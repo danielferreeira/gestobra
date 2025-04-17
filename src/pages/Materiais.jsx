@@ -23,6 +23,24 @@ const Materiais = () => {
     fornecedor: ''
   });
 
+  // Lista de categorias predefinidas
+  const categoriasPredefinidas = [
+    'Material Hidráulico',
+    'Material Elétrico',
+    'Estrutura',
+    'Acabamento',
+    'Pintura',
+    'Ferragens',
+    'Ferramentas',
+    'Equipamentos',
+    'Cimento e Argamassa',
+    'Cerâmica e Porcelanato',
+    'Areia e Brita',
+    'Madeira',
+    'EPI',
+    'Outros'
+  ];
+
   // Carregar materiais do Supabase
   useEffect(() => {
     const fetchMateriais = async () => {
@@ -508,15 +526,22 @@ const Materiais = () => {
                   
                   <div>
                     <label htmlFor="categoria" className="block text-sm font-medium text-gray-700">Categoria</label>
-                    <input
-                      type="text"
+                    <select
                       id="categoria"
                       name="categoria"
                       value={formData.categoria}
                       onChange={handleChange}
                       required
                       className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                    />
+                    >
+                      <option value="">Selecione uma categoria</option>
+                      {categoriasPredefinidas.map((cat) => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                      {formData.categoria && !categoriasPredefinidas.includes(formData.categoria) && (
+                        <option value={formData.categoria}>{formData.categoria}</option>
+                      )}
+                    </select>
                   </div>
                   
                   <div className="grid grid-cols-2 gap-4">

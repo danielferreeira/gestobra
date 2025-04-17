@@ -12,10 +12,15 @@
     "migrations": "node scripts/run_migrations.js"
   },
   "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.0",
+    "@mui/icons-material": "^7.0.2",
+    "@mui/material": "^7.0.2",
     "@supabase/supabase-js": "^2.39.3",
     "bootstrap": "^5.3.3",
     "chart.js": "^4.4.1",
     "dotenv": "^16.4.7",
+    "exceljs": "^4.4.0",
     "html2canvas": "^1.4.1",
     "jspdf": "^2.5.1",
     "jspdf-autotable": "^5.0.2",

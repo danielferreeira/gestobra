@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { FaPlus, FaEdit, FaTrash, FaDownload, FaFile, FaFileAlt, FaFilePdf, FaFileImage, FaFileWord, FaFileExcel, FaSearch, FaFilter, FaHistory, FaShare, FaEye } from 'react-icons/fa';
+import { FaPlus, FaEdit, FaTrash, FaDownload, FaFile, FaFileAlt, FaFilePdf, FaFileImage, FaFileWord, FaFileExcel, FaSearch, FaFilter, FaHistory, FaEye } from 'react-icons/fa';
 import { supabase } from '../services/supabaseClient';
 
 const DocumentosObra = ({ obraId }) => {
@@ -212,25 +212,6 @@ const DocumentosObra = ({ obraId }) => {
     setShowPreviewModal(true);
   };
 
-  // Compartilhar documento
-  const handleShare = async (documento) => {
-    try {
-      // Gerar link temporário
-      const { data, error } = await supabase.storage
-        .from('documentos')
-        .createSignedUrl(documento.arquivo_url, 3600); // Link válido por 1 hora
-      
-      if (error) throw error;
-      
-      // Copiar link para clipboard
-      await navigator.clipboard.writeText(data.signedUrl);
-      alert('Link de compartilhamento copiado para a área de transferência!');
-    } catch (error) {
-      console.error('Erro ao compartilhar documento:', error);
-      setError('Erro ao gerar link de compartilhamento');
-    }
-  };
-
   // Manipular evento de clique em editar
   const handleEdit = (documento) => {
     setCurrentDocumento(documento);
@@ -296,15 +277,17 @@ const DocumentosObra = ({ obraId }) => {
       if (formData.arquivo) {
         const file = formData.arquivo;
         const fileExt = file.name.split('.').pop();
-        const fileName = `${obraId}/${Math.random().toString(36).substring(2)}.${fileExt}`;
-        const filePath = `${fileName}`;
+        // Simplificar o nome do arquivo para evitar problemas de caminho
+        const fileName = `${Date.now()}_${Math.random().toString(36).substring(2)}.${fileExt}`;
         
-        // Upload para o bucket
-        const { error: uploadError } = await supabase.storage
+        console.log('Iniciando upload para o bucket documentos: ' + fileName);
+        
+        // Upload para o bucket - CORREÇÃO DO PATH
+        const { data: fileData, error: uploadError } = await supabase.storage
           .from('documentos')
-          .upload(filePath, file, {
+          .upload(fileName, file, {
             cacheControl: '3600',
-            upsert: false,
+            upsert: true, // Usar upsert true para substituir arquivo se existir
             onUploadProgress: (progress) => {
               const percent = Math.round((progress.loaded / progress.total) * 100);
               setUploadProgress(percent);
@@ -312,15 +295,19 @@ const DocumentosObra = ({ obraId }) => {
           });
         
         if (uploadError) {
-          throw uploadError;
+          console.error('Erro no upload:', uploadError);
+          throw new Error(`Erro no upload: ${uploadError.message}`);
         }
+        
+        console.log('Upload concluído:', fileData);
         
         // Obter URL pública
         const { data: urlData } = supabase.storage
           .from('documentos')
-          .getPublicUrl(filePath);
+          .getPublicUrl(fileName);
         
         publicUrl = urlData.publicUrl;
+        console.log('URL pública gerada:', publicUrl);
       }
       
       // Inserir ou atualizar registro no banco
@@ -414,15 +401,18 @@ const DocumentosObra = ({ obraId }) => {
         throw getError;
       }
       
-      // Extrair o caminho do arquivo da URL
+      // Extrair o caminho do arquivo da URL - CORREÇÃO DO PATH
       if (documento.arquivo_url) {
+        // Obter apenas o nome do arquivo da URL
         const url = documento.arquivo_url;
-        const path = url.split('/').slice(-2).join('/');
+        const fileName = url.split('/').pop();
         
-        // Excluir o arquivo do Storage
+        console.log('Removendo arquivo:', fileName);
+        
+        // Excluir o arquivo do Storage com path corrigido
         const { error: storageError } = await supabase.storage
           .from('documentos')
-          .remove([path]);
+          .remove([fileName]);
         
         if (storageError) {
           console.error('Erro ao excluir arquivo:', storageError);
@@ -620,13 +610,6 @@ const DocumentosObra = ({ obraId }) => {
                           title="Download"
                         >
                           <FaDownload />
-                        </button>
-                        <button
-                          onClick={() => handleShare(documento)}
-                          className="text-green-600 hover:text-green-900"
-                          title="Compartilhar"
-                        >
-                          <FaShare />
                         </button>
                         <button
                           onClick={() => handleEdit(documento)}

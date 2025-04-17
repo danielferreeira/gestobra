@@ -1,26 +1,32 @@
 import React, { useState } from 'react';
-import { FaFileAlt, FaDownload, FaChartBar, FaBuilding, FaMoneyBillWave, FaBoxes } from 'react-icons/fa';
+import { FaFileAlt, FaDownload, FaChartBar, FaBuilding, FaMoneyBillWave, FaBoxes, FaChartLine, FaExchangeAlt, FaClipboardList, FaWarehouse } from 'react-icons/fa';
 import { 
   gerarRelatorioObras, 
   gerarRelatorioFinanceiro, 
   gerarRelatorioMateriais, 
-  gerarRelatorioDesempenho 
+  gerarRelatorioDesempenho,
+  gerarRelatorioMovimentacoesMateriaisV1,
+  gerarRelatorioMateriaisPorObra
 } from '../services/relatoriosService';
 import { getObras } from '../services/obrasService';
 import { Toast } from '../components/Toast';
+import TablesErrorInfo from '../components/TablesErrorInfo';
 
 const Relatorios = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [selectedReport, setSelectedReport] = useState(null);
   const [obras, setObras] = useState([]);
+  const [categorias, setCategorias] = useState([]);
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState('success');
+  const [tableError, setTableError] = useState({ show: false, tableName: '', message: '' });
   const [reportParams, setReportParams] = useState({
     dataInicio: '',
     dataFim: '',
     obraId: '',
+    categoriaId: '',
     formato: 'pdf'
   });
 
@@ -49,6 +55,18 @@ const Relatorios = () => {
       nome: 'Relatório de Desempenho',
       descricao: 'Relatório de desempenho das obras, comparando planejado vs. realizado.',
       icon: <FaChartBar className="text-purple-500" />
+    },
+    {
+      id: 'materiais_por_obra',
+      nome: 'Materiais por Obra',
+      descricao: 'Relatório detalhado de materiais utilizados por obra',
+      icon: <FaWarehouse className="text-teal-500" />
+    },
+    {
+      id: 'movimentacoes_materiais',
+      nome: 'Movimentações de Materiais',
+      descricao: 'Relatório de entradas e saídas de materiais',
+      icon: <FaExchangeAlt className="text-orange-500" />
     }
   ];
 
@@ -61,6 +79,33 @@ const Relatorios = () => {
     } catch (error) {
       console.error("Erro ao carregar obras:", error);
       setError("Não foi possível carregar a lista de obras.");
+    }
+  };
+
+  // Carregar categorias de materiais
+  const loadCategorias = async () => {
+    try {
+      // Lista de categorias predefinidas
+      const categoriasList = [
+        { id: 'material_hidraulico', nome: 'Material Hidráulico' },
+        { id: 'material_eletrico', nome: 'Material Elétrico' },
+        { id: 'estrutura', nome: 'Estrutura' },
+        { id: 'acabamento', nome: 'Acabamento' },
+        { id: 'pintura', nome: 'Pintura' },
+        { id: 'ferragens', nome: 'Ferragens' },
+        { id: 'ferramentas', nome: 'Ferramentas' },
+        { id: 'equipamentos', nome: 'Equipamentos' },
+        { id: 'cimento_argamassa', nome: 'Cimento e Argamassa' },
+        { id: 'ceramica_porcelanato', nome: 'Cerâmica e Porcelanato' },
+        { id: 'areia_brita', nome: 'Areia e Brita' },
+        { id: 'madeira', nome: 'Madeira' },
+        { id: 'epi', nome: 'EPI' },
+        { id: 'outros', nome: 'Outros' }
+      ];
+      setCategorias(categoriasList);
+    } catch (error) {
+      console.error("Erro ao carregar categorias:", error);
+      setError("Não foi possível carregar a lista de categorias.");
     }
   };
 
@@ -85,12 +130,19 @@ const Relatorios = () => {
       dataInicio,
       dataFim,
       obraId: '',
+      categoriaId: '',
       formato: 'pdf'
     });
     
     // Carregar obras se necessário
-    if (report.id === 'obras' || report.id === 'desempenho') {
+    if (report.id === 'obras' || report.id === 'desempenho' || 
+        report.id === 'materiais_por_obra' || report.id === 'movimentacoes_materiais') {
       await loadObras();
+    }
+    
+    // Carregar categorias se necessário
+    if (report.id === 'movimentacoes_materiais') {
+      await loadCategorias();
     }
   };
 
@@ -119,6 +171,10 @@ const Relatorios = () => {
     if (!selectedReport) return;
     
     try {
+      // Limpar erros anteriores
+      setError(null);
+      setTableError({ show: false, tableName: '', message: '' });
+      
       // Validar datas se ambas forem fornecidas
       if (reportParams.dataInicio && reportParams.dataFim) {
         const dataInicio = new Date(reportParams.dataInicio);
@@ -132,7 +188,6 @@ const Relatorios = () => {
       }
       
       setLoading(true);
-      setError(null);
       
       let blob;
       
@@ -150,6 +205,16 @@ const Relatorios = () => {
           case 'desempenho':
             blob = await gerarRelatorioDesempenho(reportParams);
             break;
+          case 'materiais_por_obra':
+            if (!reportParams.obraId) {
+              throw new Error('É necessário selecionar uma obra para gerar este relatório');
+            }
+            const materiaisPorObraResult = await gerarRelatorioMateriaisPorObra(reportParams.obraId, reportParams.formato);
+            blob = materiaisPorObraResult.blob;
+            break;
+          case 'movimentacoes_materiais':
+            blob = await gerarRelatorioMovimentacoesMateriaisV1(reportParams);
+            break;
           default:
             throw new Error("Tipo de relatório inválido");
         }
@@ -159,12 +224,51 @@ const Relatorios = () => {
         }
       } catch (error) {
         console.error('Erro ao gerar relatório:', error);
-        setError(error.message || "Erro ao gerar relatório. Alguns dados podem estar simulados devido a problemas no banco de dados.");
-        showToastMessage("Relatório gerado com dados parciais ou simulados", 'warning');
+        
+        // Verificar se é erro de tabela não existente
+        if (error.message && error.message.includes('does not exist')) {
+          // Extrair o nome da tabela do erro
+          const match = error.message.match(/relation "([^"]+)" does not exist/);
+          let tableName = 'desconhecida';
+          
+          if (match && match[1]) {
+            tableName = match[1];
+          } else if (error.message.includes('movimentacoes_materiais')) {
+            tableName = 'movimentacoes_materiais';
+          }
+          
+          setTableError({
+            show: true,
+            tableName: tableName,
+            message: error.message
+          });
+          
+          showToastMessage("Erro no banco de dados: tabela não encontrada", 'error');
+          setLoading(false);
+          return; // Não continuar com o processo
+        }
+        
+        // Tratamento específico para outros erros de relacionamento no banco de dados
+        if (error.message && error.message.includes('relationship between')) {
+          setError("Erro de relacionamento no banco de dados. Verifique se todas as tabelas estão corretamente criadas e configuradas.");
+          showToastMessage("Problema no banco de dados. Contate o administrador do sistema.", 'error');
+        } else if (error.message && error.message.includes('does not exist')) {
+          setError("A tabela necessária não existe no banco de dados: " + error.message);
+          showToastMessage("Tabela não encontrada. Contate o administrador do sistema para criá-la.", 'error');
+        } else {
+          setError(error.message || "Erro ao gerar relatório. Verifique se existem dados para o período selecionado.");
+          showToastMessage("Erro ao gerar relatório. Verifique se existem dados disponíveis.", 'error');
+        }
         
         // Criar blob padrão para evitar erro
         const novoBlob = new Blob(["Erro ao gerar relatório. Por favor, tente novamente."], { type: "text/plain" });
         blob = novoBlob;
+      }
+      
+      // Se houve erro de tabela, não prosseguir com o download
+      if (tableError.show) {
+        setLoading(false);
+        return;
       }
       
       // Criar link para download
@@ -180,13 +284,27 @@ const Relatorios = () => {
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
       
-      showToastMessage(`Relatório ${selectedReport.nome} gerado com sucesso!`);
+      showToastMessage(`Relatório ${selectedReport.nome} gerado com sucesso! Mostrando apenas dados reais existentes no sistema.`);
       
       setLoading(false);
     } catch (error) {
       console.error('Erro ao processar relatório:', error);
-      setError(error.message || 'Erro ao gerar relatório. Tente novamente mais tarde.');
-      showToastMessage('Erro ao gerar relatório', 'error');
+      
+      // Tratamento específico para erros conhecidos
+      if (error.message && error.message.includes('relationship between')) {
+        setError("Erro de estrutura no banco de dados. Algumas tabelas podem não existir ou não estão relacionadas corretamente.");
+        showToastMessage("Problema estrutural no banco de dados. Contate o suporte técnico.", 'error');
+      } else if (error.message && error.message.includes('does not exist')) {
+        setError("A tabela necessária não existe no banco de dados: " + error.message);
+        showToastMessage("Tabela não encontrada. Contate o administrador do sistema para criá-la.", 'error');
+      } else if (error.message && error.message.includes('não encontrada')) {
+        setError("Dados necessários não foram encontrados. Verifique se todos os registros existem no sistema.");
+        showToastMessage("Dados não encontrados. Verifique os parâmetros do relatório.", 'warning');
+      } else {
+        setError(error.message || 'Erro ao gerar relatório. Tente novamente mais tarde.');
+        showToastMessage('Erro ao gerar relatório', 'error');
+      }
+      
       setLoading(false);
     }
   };
@@ -199,6 +317,14 @@ const Relatorios = () => {
           message={toastMessage} 
           type={toastType} 
           onClose={() => setShowToast(false)} 
+        />
+      )}
+      
+      {/* Erro de tabela não existente */}
+      {tableError.show && (
+        <TablesErrorInfo 
+          tableName={tableError.tableName}
+          errorMessage={tableError.message}
         />
       )}
       
@@ -260,33 +386,38 @@ const Relatorios = () => {
               </p>
               
               <form onSubmit={handleGenerateReport} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label htmlFor="dataInicio" className="block text-sm font-medium text-gray-700">Data Inicial</label>
-                    <input
-                      type="date"
-                      id="dataInicio"
-                      name="dataInicio"
-                      value={reportParams.dataInicio}
-                      onChange={handleParamChange}
-                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                    />
+                {(selectedReport.id !== 'materiais_por_obra' || 
+                 (selectedReport.id === 'materiais_por_obra' && selectedReport.id !== 'obras')) && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label htmlFor="dataInicio" className="block text-sm font-medium text-gray-700">Data Inicial</label>
+                      <input
+                        type="date"
+                        id="dataInicio"
+                        name="dataInicio"
+                        value={reportParams.dataInicio}
+                        onChange={handleParamChange}
+                        className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label htmlFor="dataFim" className="block text-sm font-medium text-gray-700">Data Final</label>
+                      <input
+                        type="date"
+                        id="dataFim"
+                        name="dataFim"
+                        value={reportParams.dataFim}
+                        onChange={handleParamChange}
+                        className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      />
+                    </div>
                   </div>
-                  
-                  <div>
-                    <label htmlFor="dataFim" className="block text-sm font-medium text-gray-700">Data Final</label>
-                    <input
-                      type="date"
-                      id="dataFim"
-                      name="dataFim"
-                      value={reportParams.dataFim}
-                      onChange={handleParamChange}
-                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                    />
-                  </div>
-                </div>
+                )}
                 
-                {(selectedReport.id === 'obras' || selectedReport.id === 'desempenho') && (
+                {(selectedReport.id === 'obras' || selectedReport.id === 'desempenho' || 
+                  selectedReport.id === 'materiais_por_obra' || 
+                  selectedReport.id === 'movimentacoes_materiais') && (
                   <div>
                     <label htmlFor="obraId" className="block text-sm font-medium text-gray-700">Obra</label>
                     <select
@@ -295,11 +426,36 @@ const Relatorios = () => {
                       value={reportParams.obraId}
                       onChange={handleParamChange}
                       className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      required={selectedReport.id === 'materiais_por_obra'}
                     >
-                      <option value="">Todas as obras</option>
+                      <option value="">
+                        {selectedReport.id === 'materiais_por_obra' 
+                          ? 'Selecione uma obra' 
+                          : 'Todas as obras'}
+                      </option>
                       {obras.map(obra => (
                         <option key={obra.id} value={obra.id}>
                           {obra.nome}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                
+                {selectedReport.id === 'movimentacoes_materiais' && (
+                  <div>
+                    <label htmlFor="categoriaId" className="block text-sm font-medium text-gray-700">Categoria de Material</label>
+                    <select
+                      id="categoriaId"
+                      name="categoriaId"
+                      value={reportParams.categoriaId}
+                      onChange={handleParamChange}
+                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                    >
+                      <option value="">Todas as categorias</option>
+                      {categorias.map(categoria => (
+                        <option key={categoria.id} value={categoria.id}>
+                          {categoria.nome}
                         </option>
                       ))}
                     </select>
@@ -325,7 +481,7 @@ const Relatorios = () => {
                   <button
                     type="submit"
                     className="w-full flex justify-center items-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                    disabled={loading}
+                    disabled={loading || (selectedReport.id === 'materiais_por_obra' && !reportParams.obraId)}
                   >
                     {loading ? (
                       <>
@@ -362,6 +518,20 @@ const Relatorios = () => {
           <li>Você pode exportar os dados em diferentes formatos para análise posterior.</li>
           <li>Para análises específicas, utilize os filtros disponíveis em cada relatório.</li>
         </ul>
+        
+        <div className="mt-4 bg-yellow-50 p-3 rounded-lg border border-yellow-200">
+          <h4 className="text-md font-medium text-yellow-800 mb-1">Importante</h4>
+          <p className="text-yellow-700">
+            Todos os relatórios exibem apenas dados reais existentes no sistema. 
+            Se não houver dados cadastrados no período selecionado, o relatório poderá aparecer vazio ou com valores zerados.
+            Para visualizar dados nos relatórios, é necessário cadastrar informações reais no sistema.
+          </p>
+          <p className="text-yellow-700 mt-2">
+            <strong>Requisitos para relatórios:</strong> Os relatórios de Movimentações de Materiais e Materiais por Obra 
+            necessitam que a tabela <code>movimentacoes_materiais</code> esteja criada no banco de dados.
+            Caso ocorra um erro informando que a tabela não existe, contate o administrador do sistema.
+          </p>
+        </div>
       </div>
     </div>
   );

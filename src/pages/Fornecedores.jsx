@@ -40,8 +40,27 @@ const Fornecedores = () => {
     descricao: '',
     unidade: 'un',
     preco_unitario: '',
-    fornecedor_id: ''
+    fornecedor_id: '',
+    categoria: ''
   });
+
+  // Lista de categorias predefinidas
+  const categoriasPredefinidas = [
+    'Material Hidráulico',
+    'Material Elétrico',
+    'Estrutura',
+    'Acabamento',
+    'Pintura',
+    'Ferragens',
+    'Ferramentas',
+    'Equipamentos',
+    'Cimento e Argamassa',
+    'Cerâmica e Porcelanato',
+    'Areia e Brita',
+    'Madeira',
+    'EPI',
+    'Outros'
+  ];
 
   // Carregar fornecedores e materiais ao montar o componente
   useEffect(() => {
@@ -365,7 +384,8 @@ const Fornecedores = () => {
       descricao: '',
       unidade: 'un',
       preco_unitario: '',
-      fornecedor_id: ''
+      fornecedor_id: '',
+      categoria: ''
     });
     setEditMode(false);
     setShowModalMaterial(true);
@@ -379,7 +399,8 @@ const Fornecedores = () => {
       descricao: material.descricao || '',
       unidade: material.unidade || 'un',
       preco_unitario: material.preco_unitario || '',
-      fornecedor_id: material.fornecedor_id || ''
+      fornecedor_id: material.fornecedor_id || '',
+      categoria: material.categoria || ''
     });
     setEditMode(true);
     setShowModalMaterial(true);
@@ -562,7 +583,8 @@ const Fornecedores = () => {
         descricao: '',
         unidade: 'un',
         preco_unitario: '',
-        fornecedor_id: ''
+        fornecedor_id: '',
+        categoria: ''
       });
     } catch (error) {
       console.error('Erro ao salvar material:', error);
@@ -903,6 +925,9 @@ const Fornecedores = () => {
                         Material
                       </th>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Categoria
+                      </th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Fornecedor
                       </th>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -941,6 +966,9 @@ const Fornecedores = () => {
                               {material.descricao}
                             </div>
                           )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {material.categoria || 'Não especificado'}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                           {material.fornecedores?.nome || 'Sem fornecedor'}
@@ -1151,6 +1179,27 @@ const Fornecedores = () => {
                   {!materialForm.fornecedor_id && (
                     <p className="text-xs text-red-500 mt-1">A seleção de fornecedor é obrigatória</p>
                   )}
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Categoria
+                  </label>
+                  <select
+                    name="categoria"
+                    value={materialForm.categoria}
+                    onChange={handleMaterialFormChange}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2"
+                    required
+                  >
+                    <option value="">Selecione uma categoria</option>
+                    {categoriasPredefinidas.map((cat) => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                    {materialForm.categoria && !categoriasPredefinidas.includes(materialForm.categoria) && (
+                      <option value={materialForm.categoria}>{materialForm.categoria}</option>
+                    )}
+                  </select>
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
