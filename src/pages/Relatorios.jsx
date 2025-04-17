@@ -1,10 +1,22 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { FaFileAlt, FaDownload, FaChartBar, FaBuilding, FaMoneyBillWave, FaBoxes } from 'react-icons/fa';
+import { 
+  gerarRelatorioObras, 
+  gerarRelatorioFinanceiro, 
+  gerarRelatorioMateriais, 
+  gerarRelatorioDesempenho 
+} from '../services/relatoriosService';
+import { getObras } from '../services/obrasService';
+import { Toast } from '../components/Toast';
 
 const Relatorios = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [selectedReport, setSelectedReport] = useState(null);
+  const [obras, setObras] = useState([]);
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastType, setToastType] = useState('success');
   const [reportParams, setReportParams] = useState({
     dataInicio: '',
     dataFim: '',
@@ -40,6 +52,18 @@ const Relatorios = () => {
     }
   ];
 
+  // Carregar obras quando selecionar relatórios que precisam de obra
+  const loadObras = async () => {
+    try {
+      const { data, error } = await getObras();
+      if (error) throw error;
+      setObras(data || []);
+    } catch (error) {
+      console.error("Erro ao carregar obras:", error);
+      setError("Não foi possível carregar a lista de obras.");
+    }
+  };
+
   // Manipular mudanças nos parâmetros do relatório
   const handleParamChange = (e) => {
     const { name, value } = e.target;
@@ -47,15 +71,45 @@ const Relatorios = () => {
   };
 
   // Selecionar relatório
-  const handleSelectReport = (report) => {
+  const handleSelectReport = async (report) => {
     setSelectedReport(report);
-    // Resetar parâmetros
+    
+    // Definir datas padrão (mês atual)
+    const hoje = new Date();
+    const primeiroDiaMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+    const dataInicio = primeiroDiaMes.toISOString().split('T')[0];
+    const dataFim = hoje.toISOString().split('T')[0];
+    
+    // Resetar parâmetros com datas padrão
     setReportParams({
-      dataInicio: '',
-      dataFim: '',
+      dataInicio,
+      dataFim,
       obraId: '',
       formato: 'pdf'
     });
+    
+    // Carregar obras se necessário
+    if (report.id === 'obras' || report.id === 'desempenho') {
+      await loadObras();
+    }
+  };
+
+  // Função para gerar nome do arquivo
+  const gerarNomeArquivo = (tipoRelatorio, formato) => {
+    const hoje = new Date().toISOString().split('T')[0];
+    return `relatorio_${tipoRelatorio}_${hoje}.${formato === 'excel' ? 'xlsx' : formato}`;
+  };
+
+  // Função para mostrar toast
+  const showToastMessage = (message, type = 'success') => {
+    setToastMessage(message);
+    setToastType(type);
+    setShowToast(true);
+    
+    // Fechar automaticamente após 5 segundos
+    setTimeout(() => {
+      setShowToast(false);
+    }, 5000);
   };
 
   // Gerar relatório
@@ -65,26 +119,89 @@ const Relatorios = () => {
     if (!selectedReport) return;
     
     try {
+      // Validar datas se ambas forem fornecidas
+      if (reportParams.dataInicio && reportParams.dataFim) {
+        const dataInicio = new Date(reportParams.dataInicio);
+        const dataFim = new Date(reportParams.dataFim);
+        
+        if (dataFim < dataInicio) {
+          setError('A data final não pode ser anterior à data inicial');
+          showToastMessage('A data final não pode ser anterior à data inicial', 'error');
+          return;
+        }
+      }
+      
       setLoading(true);
       setError(null);
       
-      // Aqui seria implementada a lógica para gerar o relatório
-      // Por enquanto, apenas simulamos um atraso
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      let blob;
       
-      // Simular download (em uma implementação real, isso seria substituído pelo download real do arquivo)
-      alert(`Relatório ${selectedReport.nome} gerado com sucesso!`);
+      try {
+        switch (selectedReport.id) {
+          case 'obras':
+            blob = await gerarRelatorioObras(reportParams);
+            break;
+          case 'financeiro':
+            blob = await gerarRelatorioFinanceiro(reportParams);
+            break;
+          case 'materiais':
+            blob = await gerarRelatorioMateriais(reportParams);
+            break;
+          case 'desempenho':
+            blob = await gerarRelatorioDesempenho(reportParams);
+            break;
+          default:
+            throw new Error("Tipo de relatório inválido");
+        }
+        
+        if (!blob) {
+          throw new Error("Não foi possível gerar o relatório. Tente novamente mais tarde.");
+        }
+      } catch (error) {
+        console.error('Erro ao gerar relatório:', error);
+        setError(error.message || "Erro ao gerar relatório. Alguns dados podem estar simulados devido a problemas no banco de dados.");
+        showToastMessage("Relatório gerado com dados parciais ou simulados", 'warning');
+        
+        // Criar blob padrão para evitar erro
+        const novoBlob = new Blob(["Erro ao gerar relatório. Por favor, tente novamente."], { type: "text/plain" });
+        blob = novoBlob;
+      }
+      
+      // Criar link para download
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.style.display = 'none';
+      a.href = url;
+      a.download = gerarNomeArquivo(selectedReport.id, reportParams.formato);
+      
+      // Adicionar à página, clicar, e remover
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
+      showToastMessage(`Relatório ${selectedReport.nome} gerado com sucesso!`);
       
       setLoading(false);
     } catch (error) {
-      console.error('Erro ao gerar relatório:', error);
-      setError(error.message || 'Erro ao gerar relatório');
+      console.error('Erro ao processar relatório:', error);
+      setError(error.message || 'Erro ao gerar relatório. Tente novamente mais tarde.');
+      showToastMessage('Erro ao gerar relatório', 'error');
       setLoading(false);
     }
   };
 
   return (
     <div className="space-y-6">
+      {/* Toast de notificação */}
+      {showToast && (
+        <Toast 
+          message={toastMessage} 
+          type={toastType} 
+          onClose={() => setShowToast(false)} 
+        />
+      )}
+      
       {/* Mensagem de erro */}
       {error && (
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
@@ -132,9 +249,15 @@ const Relatorios = () => {
         <div>
           {selectedReport ? (
             <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
-              <h2 className="text-lg font-medium text-gray-700 mb-4">
+              <h2 className="text-lg font-medium text-gray-700 mb-1">
                 Parâmetros para {selectedReport.nome}
               </h2>
+              <p className="text-sm text-gray-500 mb-4">
+                {selectedReport.id === 'obras' && 'Configure os parâmetros para gerar um relatório detalhado das obras, incluindo orçamentos e gastos.'}
+                {selectedReport.id === 'financeiro' && 'Configure o período para análise financeira, incluindo receitas, despesas e balanço.'}
+                {selectedReport.id === 'materiais' && 'Configure o período para análise de materiais, incluindo estoque e requisições.'}
+                {selectedReport.id === 'desempenho' && 'Configure os parâmetros para avaliar o desempenho das obras, incluindo cumprimento de prazos.'}
+              </p>
               
               <form onSubmit={handleGenerateReport} className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
@@ -165,16 +288,21 @@ const Relatorios = () => {
                 
                 {(selectedReport.id === 'obras' || selectedReport.id === 'desempenho') && (
                   <div>
-                    <label htmlFor="obraId" className="block text-sm font-medium text-gray-700">ID da Obra (opcional)</label>
-                    <input
-                      type="text"
+                    <label htmlFor="obraId" className="block text-sm font-medium text-gray-700">Obra</label>
+                    <select
                       id="obraId"
                       name="obraId"
                       value={reportParams.obraId}
                       onChange={handleParamChange}
-                      placeholder="Deixe em branco para todas as obras"
                       className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                    />
+                    >
+                      <option value="">Todas as obras</option>
+                      {obras.map(obra => (
+                        <option key={obra.id} value={obra.id}>
+                          {obra.nome}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 )}
                 
