@@ -9,8 +9,63 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  --color-primary: #3B82F6;
 }
 
 body {
   min-height: 100vh;
+}
+
+/* Sobrescrever cores primárias do Tailwind com a variável personalizada */
+.bg-blue-500, .hover\:bg-blue-600:hover, .bg-blue-600, .hover\:bg-blue-700:hover {
+  background-color: var(--color-primary) !important;
+}
+
+.text-blue-500, .hover\:text-blue-600:hover, .text-blue-600 {
+  color: var(--color-primary) !important;
+}
+
+.border-blue-500, .border-blue-600 {
+  border-color: var(--color-primary) !important;
+}
+
+/* Ajustes para tema escuro */
+.dark .bg-white {
+  background-color: #374151 !important;
+}
+
+.dark .text-gray-800 {
+  color: #f3f4f6 !important;
+}
+
+.dark .text-gray-700 {
+  color: #e5e7eb !important;
+}
+
+.dark .text-gray-500 {
+  color: #d1d5db !important;
+}
+
+.dark .border-gray-200 {
+  border-color: #4b5563 !important;
+}
+
+.dark .hover\:bg-gray-50:hover {
+  background-color: #4b5563 !important;
+}
+
+/* Ajustes adicionais para o modo escuro */
+.dark input, .dark select, .dark textarea {
+  background-color: #1f2937;
+  border-color: #4b5563;
+  color: #f9fafb;
+}
+
+.dark .shadow {
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.4), 0 1px 2px 0 rgba(0, 0, 0, 0.24);
+}
+
+/* Transições suaves para mudanças de tema */
+body, input, select, textarea, button, .bg-white, .text-gray-800, .text-gray-700, .text-gray-500, .border-gray-200 {
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
 }
